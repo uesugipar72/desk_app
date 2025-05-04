@@ -1,5 +1,5 @@
-import subprocess
-import os
+# import subprocess
+# import os
 import sys
 import json
 from tkinter import ttk
