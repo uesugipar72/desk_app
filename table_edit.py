@@ -8,16 +8,32 @@ conn = sqlite3.connect(db_name)
 cursor = conn.cursor()
 
 # テーブルを作成
+# table_creation_query = """
+# CREATE TABLE IF NOT EXISTS equipment (
+#     id INTEGER PRIMARY KEY AUTOINCREMENT,
+#     name TEXT NOT NULL,
+#     equipment_id TEXT UNIQUE NOT NULL,
+#     categorie TEXT NOT NULL,
+#     purchase_date TEXT,
+#     status TEXT CHECK(status IN ('使用中', '良好', '修理中', '廃棄')) DEFAULT '良好',
+#     borrower TEXT,
+#     remarks TEXT
+# );
+# """
 table_creation_query = """
-CREATE TABLE IF NOT EXISTS equipment (
+CREATE TABLE IF NOT EXISTS repair (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    equipment_id TEXT UNIQUE NOT NULL,
-    categorie TEXT NOT NULL,
-    purchase_date TEXT,
-    status TEXT CHECK(status IN ('使用中', '良好', '修理中', '廃棄')) DEFAULT '良好',
-    borrower TEXT,
-    remarks TEXT
+    equipment_id INTEGER NOT NULL,
+    status TEXT CHECK(status IN ('依頼中', '修理中', '完了', 'キャンセル')) DEFAULT '依頼中',
+    request_date TEXT,
+    completion_date TEXT,
+    category TEXT,
+    details TEXT,
+    vendor TEXT,
+    technician TEXT,
+    cost REAL,
+    remarks TEXT,
+    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
 );
 """
 
