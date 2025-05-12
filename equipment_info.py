@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont 
+import os
+import sys  
 from equipment_sarch import fetch_data
 from cls_master_data_fetcher import MasterDataFetcher
 import subprocess
@@ -129,6 +131,25 @@ def search():
         set_fixed_column_widths(tree)
 
     # ★ カラム幅自動調整機能の追加（文字幅に応じて）
+def export_to_excel():
+    # Treeview から全行のデータを取得
+    all_data = [tree.item(item, "values") for item in tree.get_children()]
+    
+    if not all_data:
+        messagebox.showinfo("情報", "エクスポートするデータがありません。")
+        return
+    
+    headers = [
+        "機器分類", "機器コード", "機器名", "状態", "部門", "部屋",
+        "製造元", "販売元", "備考", "購入日", "モデル"
+    ]
+    
+    # subprocess で別ファイルを実行
+    json_data = json.dumps(all_data, ensure_ascii=False)
+    json_headers = json.dumps(headers, ensure_ascii=False)
+    
+    subprocess.run(["python", "export_to_excel.py", json_data, json_headers, r"C:\desk_app\export_files", "export_files.xlsx"])
+
 
 def create_equipment_treeview(parent): 
     """
@@ -301,6 +322,9 @@ btn_search.grid(row=len(labels)//4+1, column=0, padx=5, pady=5)
 
 btn_reset = ttk.Button(frame_search, text="条件初期化", command=reset_conditions)
 btn_reset.grid(row=len(labels)//4+1, column=1, padx=5, pady=5)
+
+btn_export = ttk.Button(frame_search, text="Excel出力", command=export_to_excel)
+btn_export.grid(row=len(labels)//4+1, column=2, padx=5, pady=5)
 
 # テーブル
 tree = create_equipment_treeview(frame_table)
