@@ -47,6 +47,30 @@ def get_id_from_name(name, data_list):
             return item_id
     return None  # 該当なしの場合はNone
 
+def display_repair_history(equipment_id):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT status, request_date, completion_date, category, vendor, technician
+        FROM repair
+        WHERE equipment_id = ?
+        ORDER BY request_date DESC;
+    """, (equipment_id,))
+    repairs = cursor.fetchall()
+    conn.close()
+
+    # Treeview の列設定
+    columns = ["status", "request_date", "completion_date", "category", "vendor", "technician"]
+    tree = ttk.Treeview(repair_frame, columns=columns, show='headings', height=20)
+    for col in columns:
+        tree.heading(col, text=col)
+        tree.column(col, width=100, anchor='center')
+    tree.pack(fill=tk.BOTH, expand=True)
+
+    for row in repairs:
+        tree.insert('', tk.END, values=row)
+
+
 # データ挿入関数
 def save_equipment():
     updated_data = {}
@@ -104,20 +128,22 @@ def cancel_edit():
 root_edit = tk.Tk()
 root_edit.title("器材情報修正")
 
-window_width = 400
-window_height = 500
-screen_width = root_edit.winfo_screenwidth()
-screen_height = root_edit.winfo_screenheight()
-position_top = int(screen_height / 2 - window_height / 2)
-position_right = int(screen_width / 2 - window_width / 2)
-root_edit.geometry(f"{window_width}x{window_height}+{position_right}+{position_top}")
+# メインウィンドウレイアウト調整
+main_frame = tk.Frame(root_edit)
+main_frame.pack(fill=tk.BOTH, expand=True)
+
+form_frame = tk.Frame(main_frame)
+form_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
+
+repair_frame = tk.Frame(main_frame)
+repair_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 input_vars = {}
 labels = ["カテゴリ名", "器材番号", "器材名", "状態", "部門", "部屋", "製造元","販売元", "備考","購入日", "モデル(シリアル)"]
 keys = ["categorie_name", "equipment_id", "name", "statuse_name", "department_name", "room_name", "manufacturer_name", "celler_name", "remarks", "purchase_date", "model"]
 
 for i, (label, key) in enumerate(zip(labels, keys)):
-    tk.Label(root_edit, text=label).grid(row=i, column=0, padx=10, pady=5)
+    tk.Label(form_frame, text=label).grid(row=i, column=0, padx=5, pady=3)
     var = tk.StringVar(value=equipment_data.get(key, ""))
     input_vars[key] = var
     
@@ -130,12 +156,15 @@ for i, (label, key) in enumerate(zip(labels, keys)):
         entry = DateEntry(root_edit, textvariable=var, date_pattern='yyyy-MM-dd')
     else:
         entry = tk.Entry(root_edit, textvariable=var)
-    entry.grid(row=i, column=1, padx=10, pady=5)
+    entry.grid(row=i, column=1, padx=5, pady=3)
 
-save_button = tk.Button(root_edit, text="保存", command=save_equipment)
+save_button = tk.Button(form_frame, text="保存", command=save_equipment)
 save_button.grid(row=len(labels), column=0, pady=20)
 
-cancel_button = tk.Button(root_edit, text="キャンセル", command=cancel_edit)
+cancel_button = tk.Button(form_frame, text="キャンセル", command=cancel_edit)
 cancel_button.grid(row=len(labels), column=1, pady=20)
 
-root_edit.mainloop()
+if equipment_data.get("equipment_id"):
+    display_repair_history(equipment_data["equipment_id"])
+
+main_frame.mainloop()
