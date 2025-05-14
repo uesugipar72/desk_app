@@ -11,7 +11,7 @@ from open_master_list import open_master_list_window
 from tkinter import messagebox
 import sqlite3
 import json
-
+from datetime import datetime
 
 db_name = "equipment_management.db"
 fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
@@ -144,11 +144,22 @@ def export_to_excel():
         "製造元", "販売元", "備考", "購入日", "モデル"
     ]
     
+      # ファイル名に日付を付ける
+    now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = f"export_{now_str}.xlsx"
+    output_folder = r"C:\desk_app\export_files"
+    
     # subprocess で別ファイルを実行
     json_data = json.dumps(all_data, ensure_ascii=False)
     json_headers = json.dumps(headers, ensure_ascii=False)
     
-    subprocess.run(["python", "export_to_excel.py", json_data, json_headers, r"C:\desk_app\export_files", "export_files.xlsx"])
+    subprocess.run([
+        "python",
+        "export_to_excel.py",
+        json_data,
+        json_headers,
+        output_folder,
+        file_name])
 
 
 def create_equipment_treeview(parent): 

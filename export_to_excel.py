@@ -4,7 +4,7 @@ import json
 import openpyxl
 from openpyxl.styles import Font, Alignment
 
-def export_to_excel(data, headers,  output_folder="export_files", filename="search_results.xlsx"):
+def export_to_excel(data, headers,  output_folder="export_folder", filename="filename.xlsx"):
     # 出力フォルダが存在しなければ作成
     os.makedirs(output_folder, exist_ok=True)
     output_file = os.path.join(output_folder, filename)
