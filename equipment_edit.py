@@ -69,6 +69,28 @@ def display_repair_history(equipment_id):
 
     for row in repairs:
         tree.insert('', tk.END, values=row)
+def display_repair_history(equipment_id):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT status, request_date, completion_date, category, vendor, technician
+        FROM repair
+        WHERE equipment_id = ?
+        ORDER BY request_date DESC;
+    """, (equipment_id,))
+    repairs = cursor.fetchall()
+    conn.close()
+
+    # Treeview の列設定
+    columns = ["status", "request_date", "completion_date", "category", "vendor", "technician"]
+    tree = ttk.Treeview(repair_frame, columns=columns, show='headings', height=20)
+    for col in columns:
+        tree.heading(col, text=col)
+        tree.column(col, width=100, anchor='center')
+    tree.pack(fill=tk.BOTH, expand=True)
+
+    for row in repairs:
+        tree.insert('', tk.END, values=row)
 
 
 # データ挿入関数
@@ -151,11 +173,11 @@ for i, (label, key) in enumerate(zip(labels, keys)):
         # コンボボックスの作成
         key_prefix = key.split("_", 1)[0]  # アンダースコア前の文字列を取得
         combo_values = [name for _, name in locals().get(key_prefix + 's', [])]
-        entry = ttk.Combobox(root_edit, textvariable=var, values=combo_values, state="readonly")
+        entry = ttk.Combobox(form_frame, textvariable=var, values=combo_values, state="readonly")
     elif key == "purchase_date":
-        entry = DateEntry(root_edit, textvariable=var, date_pattern='yyyy-MM-dd')
+        entry = DateEntry(form_frame, textvariable=var, date_pattern='yyyy-MM-dd')
     else:
-        entry = tk.Entry(root_edit, textvariable=var)
+        entry = tk.Entry(form_frame, textvariable=var)
     entry.grid(row=i, column=1, padx=5, pady=3)
 
 save_button = tk.Button(form_frame, text="保存", command=save_equipment)
@@ -167,4 +189,4 @@ cancel_button.grid(row=len(labels), column=1, pady=20)
 if equipment_data.get("equipment_id"):
     display_repair_history(equipment_data["equipment_id"])
 
-main_frame.mainloop()
+root_edit.mainloop()
