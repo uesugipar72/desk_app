@@ -220,7 +220,8 @@ def on_tree_item_double_click(event):
         equipment_json = json.dumps(equipment_data)
 
         # subprocessの実行（適切に引数を渡す）
-        subprocess.run(["python", "equipment_edit.py", equipment_json])
+        # subprocess.run(["python", "equipment_edit.py", equipment_json])
+        subprocess.run(["python", "repair_info_add.py", equipment_json])
         root.focus_force()
         search()
 
