@@ -69,28 +69,6 @@ def display_repair_history(equipment_id):
 
     for row in repairs:
         tree.insert('', tk.END, values=row)
-def display_repair_history(equipment_id):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT status, request_date, completion_date, category, vendor, technician
-        FROM repair
-        WHERE equipment_id = ?
-        ORDER BY request_date DESC;
-    """, (equipment_id,))
-    repairs = cursor.fetchall()
-    conn.close()
-
-    # Treeview の列設定
-    columns = ["status", "request_date", "completion_date", "category", "vendor", "technician"]
-    tree = ttk.Treeview(repair_frame, columns=columns, show='headings', height=20)
-    for col in columns:
-        tree.heading(col, text=col)
-        tree.column(col, width=100, anchor='center')
-    tree.pack(fill=tk.BOTH, expand=True)
-
-    for row in repairs:
-        tree.insert('', tk.END, values=row)
 
 
 # データ挿入関数

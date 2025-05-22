@@ -13,6 +13,7 @@ import sqlite3
 import json
 from datetime import datetime
 
+
 db_name = "equipment_management.db"
 fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
 
@@ -221,7 +222,7 @@ def on_tree_item_double_click(event):
 
         # subprocessの実行（適切に引数を渡す）
         # subprocess.run(["python", "equipment_edit.py", equipment_json])
-        subprocess.run(["python", "repair_info_add.py", equipment_json])
+        subprocess.run(["python", "repair_info.py", equipment_json])
         root.focus_force()
         search()
 

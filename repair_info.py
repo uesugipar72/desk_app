@@ -9,7 +9,7 @@ from tkcalendar import DateEntry
 from cls_master_data_fetcher import MasterDataFetcher
 import sqlite3
 from cls_new_equipment_number import EquipmentManager
-
+from cls_edit_repair_window import EditRepairWindow  # 追加
 # データベース接続設定
 db_name = "equipment_management.db"
 fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
@@ -69,78 +69,27 @@ def display_repair_history(equipment_id):
 
     for row in repairs:
         tree.insert('', tk.END, values=row)
-def display_repair_history(equipment_id):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT status, request_date, completion_date, category, vendor, technician
-        FROM repair
-        WHERE equipment_id = ?
-        ORDER BY request_date DESC;
-    """, (equipment_id,))
-    repairs = cursor.fetchall()
-    conn.close()
+def open_edit_repair():
+    # Treeviewの子アイテムを取得
+    children = repair_frame.winfo_children()
+    tree = None
+    for child in children:
+        if isinstance(child, ttk.Treeview):
+            tree = child
+            break
 
-    # Treeview の列設定
-    columns = ["status", "request_date", "completion_date", "category", "vendor", "technician"]
-    tree = ttk.Treeview(repair_frame, columns=columns, show='headings', height=20)
-    for col in columns:
-        tree.heading(col, text=col)
-        tree.column(col, width=100, anchor='center')
-    tree.pack(fill=tk.BOTH, expand=True)
+    if tree is None:
+        messagebox.showerror("エラー", "修理履歴が見つかりません。")
+        return
 
-    for row in repairs:
-        tree.insert('', tk.END, values=row)
+    selected = tree.selection()
+    if not selected:
+        messagebox.showwarning("選択なし", "修正する修理情報を選択してください。")
+        return
 
+    selected_data = tree.item(selected[0], "values")
 
-# データ挿入関数
-def save_equipment():
-    updated_data = {}
-    for key, var in input_vars.items():
-        if equipment_data.get(key, "") != var.get():
-            updated_data[key] = var.get()
-    
-    if updated_data:
-        try:
-            conn = sqlite3.connect(db_name)
-            cursor = conn.cursor()
-
-            # 各名称に対応するIDを取得
-            categorie_id = get_id_from_name(updated_data.get("categorie_name", equipment_data["categorie_name"]), categories)
-            statuse_id = get_id_from_name(updated_data.get("statuse_name", equipment_data["statuse_name"]), statuses)
-            department_id = get_id_from_name(updated_data.get("department_name", equipment_data["department_name"]), departments)
-            manufacturer_id = get_id_from_name(updated_data.get("manufacturer_name", equipment_data["manufacturer_name"]), manufacturers)
-            room_id = get_id_from_name(updated_data.get("room_name", equipment_data["room_name"]), rooms)
-            celler_id = get_id_from_name(updated_data.get("celler_name", equipment_data["celler_name"]), cellers)
-
-            query = """
-            UPDATE equipment
-            SET categorie_id = ?, name = ?, statuse_id = ?, department_id = ?, room_id = ?, manufacturer_id=?, celler_id = ?, purchase_date = ?, remarks = ?, model = ?
-            WHERE equipment_id = ?;
-            """
-            cursor.execute(query, (
-                categorie_id,
-                updated_data.get("name", equipment_data["name"]),
-                statuse_id,
-                department_id,
-                room_id,
-                manufacturer_id,
-                celler_id,
-                updated_data.get("purchase_date", equipment_data["purchase_date"]),
-                updated_data.get("remarks", equipment_data["remarks"]),
-                updated_data.get("model", equipment_data["model"]),
-                equipment_data["equipment_id"]
-            ))
-
-            conn.commit()
-        except sqlite3.Error as e:
-            print("データベースエラー:", e)
-        else:
-            messagebox.showinfo("成功", "データが更新されました。")
-        finally:
-            conn.close()
-                   
-    root_edit.destroy()
+    EditRepairWindow(root_edit, db_name, equipment_data["equipment_id"], selected_data)
 
 # キャンセル関数
 def cancel_edit():
@@ -179,8 +128,6 @@ button_frame.grid(row=len(labels), column=0, columnspan=2, pady=20)
 def open_add_repair():
     messagebox.showinfo("修理情報追加", "修理情報追加画面を開く処理をここに記述してください。")
 
-def open_edit_repair():
-    messagebox.showinfo("修理情報修正", "修理情報修正画面を開く処理をここに記述してください。")
 
 btn_add_repair = tk.Button(button_frame, text="修理情報追加", command=open_add_repair)
 btn_add_repair.pack(side=tk.LEFT, padx=5)
