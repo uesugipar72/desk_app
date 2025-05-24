@@ -70,26 +70,29 @@ def display_repair_history(equipment_id):
     for row in repairs:
         tree.insert('', tk.END, values=row)
 def open_edit_repair():
-    # Treeviewの子アイテムを取得
-    children = repair_frame.winfo_children()
-    tree = None
-    for child in children:
-        if isinstance(child, ttk.Treeview):
-            tree = child
-            break
+    try:
+        children = repair_frame.winfo_children()
+        tree = None
+        for child in children:
+            if isinstance(child, ttk.Treeview):
+                tree = child
+                break
 
-    if tree is None:
-        messagebox.showerror("エラー", "修理履歴が見つかりません。")
-        return
+        if tree is None:
+            messagebox.showerror("エラー", "修理履歴が見つかりません。")
+            return
 
-    selected = tree.selection()
-    if not selected:
-        messagebox.showwarning("選択なし", "修正する修理情報を選択してください。")
-        return
+        selected = tree.selection()
+        if not selected:
+            messagebox.showwarning("選択なし", "修正する修理情報を選択してください。")
+            return
 
-    selected_data = tree.item(selected[0], "values")
+        selected_data = tree.item(selected[0], "values")
+        print("選択された修理データ:", selected_data)
 
-    EditRepairWindow(root_edit, db_name, equipment_data["equipment_id"], selected_data)
+        EditRepairWindow(root_edit, db_name, equipment_data["equipment_id"], selected_data, categories, cellers)
+    except Exception as e:
+        messagebox.showerror("例外発生", f"エラーが発生しました:\n{e}")
 
 # キャンセル関数
 def cancel_edit():
