@@ -5,7 +5,7 @@ from tkcalendar import DateEntry
 import sqlite3
 
 class EditRepairWindow(tk.Toplevel):
-    def __init__(self, parent, db_name, equipment_id, selected_data, categories, vendors):
+    def __init__(self, parent, db_name, equipment_id, selected_data, categories, vendors, refresh_callback=None):
         super().__init__(parent)
         self.title("修理情報修正")
         self.db_name = db_name
@@ -13,7 +13,7 @@ class EditRepairWindow(tk.Toplevel):
         self.selected_data = selected_data
         self.categories = categories
         self.vendors = vendors
-
+        self.refresh_callback = refresh_callback  # 修理履歴を更新するコールバック
         self.create_widgets()
         self.populate_fields()
 
@@ -88,6 +88,9 @@ class EditRepairWindow(tk.Toplevel):
             conn.commit()
             conn.close()
             messagebox.showinfo("完了", "修理情報を更新しました。")
+            if self.refresh_callback:
+                self.refresh_callback()
+
             self.destroy()
 
         except Exception as e:
