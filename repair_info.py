@@ -21,6 +21,7 @@ departments = fetcher.fetch_all("department_master")
 rooms = fetcher.fetch_all("room_master")
 manufacturers = fetcher.fetch_all("manufacturer_master")
 cellers = fetcher.fetch_all("celler_master")
+repaircategories = fetcher.fetch_all("repair_category_master")
 
 # デフォルト値を設定（万が一データがない場合）
 if not categories:
@@ -48,6 +49,7 @@ def get_id_from_name(name, data_list):
     return None  # 該当なしの場合はNone
 
 def display_repair_history(equipment_id):
+    global repair_tree
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     cursor.execute("""
@@ -61,36 +63,44 @@ def display_repair_history(equipment_id):
 
     # Treeview の列設定
     columns = ["status", "request_date", "completion_date", "category", "vendor", "technician"]
-    tree = ttk.Treeview(repair_frame, columns=columns, show='headings', height=20)
-    for col in columns:
-        tree.heading(col, text=col)
-        tree.column(col, width=100, anchor='center')
-    tree.pack(fill=tk.BOTH, expand=True)
+
+    if 'repair_tree' not in globals():
+        repair_tree = ttk.Treeview(repair_frame, columns=columns, show='headings', height=20)
+        for col in columns:
+            repair_tree.heading(col, text=col)
+            repair_tree.column(col, width=100, anchor='center')
+        repair_tree.pack(fill=tk.BOTH, expand=True)
+    else:
+        # 既存の内容をクリア
+        for item in repair_tree.get_children():
+            repair_tree.delete(item)
 
     for row in repairs:
-        tree.insert('', tk.END, values=row)
+        repair_tree.insert('', tk.END, values=row)
 def open_edit_repair():
     try:
-        children = repair_frame.winfo_children()
-        tree = None
-        for child in children:
-            if isinstance(child, ttk.Treeview):
-                tree = child
-                break
-
-        if tree is None:
+        if 'repair_tree' not in globals():
             messagebox.showerror("エラー", "修理履歴が見つかりません。")
             return
 
-        selected = tree.selection()
+        selected = repair_tree.selection()
         if not selected:
             messagebox.showwarning("選択なし", "修正する修理情報を選択してください。")
             return
 
-        selected_data = tree.item(selected[0], "values")
+        selected_data = repair_tree.item(selected[0], "values")
         print("選択された修理データ:", selected_data)
 
-        EditRepairWindow(root_edit, db_name, equipment_data["equipment_id"], selected_data, categories, cellers)
+        # コールバック関数を渡す
+        EditRepairWindow(
+            parent=root_edit,
+            db_name=db_name,
+            equipment_id=equipment_data["equipment_id"],
+            selected_data=selected_data,
+            categories=repaircategories,
+            vendors=cellers,
+            refresh_callback=lambda: display_repair_history(equipment_data["equipment_id"])  # ← 追加
+        )
     except Exception as e:
         messagebox.showerror("例外発生", f"エラーが発生しました:\n{e}")
 
