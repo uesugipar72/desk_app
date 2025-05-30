@@ -18,15 +18,15 @@ db_name = "equipment_management.db"
 fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
 
 # 各マスタテーブルからデータ取得
-categories = fetcher.fetch_all("categorie_master")
-statuses = fetcher.fetch_all("statuse_master")
+categorys = fetcher.fetch_all("category_master")
+statuses = fetcher.fetch_all("status_master")
 departments = fetcher.fetch_all("department_master")
 cellers = fetcher.fetch_all("celler_master")
 manufacturers = fetcher.fetch_all("manufacturer_master")
 rooms = fetcher.fetch_all("room_master")
 # デフォルト値を設定（万が一データがない場合）
-if not categories:
-    categories = [(1, "検査機器"), (2, "一般備品"), (3, "消耗品"), (4, "その他")]
+if not categorys:
+    categorys = [(1, "検査機器"), (2, "一般備品"), (3, "消耗品"), (4, "その他")]
 if not statuses:
     statuses = [(1, "使用中"), (2, "良好"), (3, "修理中"), (4, "廃棄")]
 if not departments:
@@ -44,12 +44,12 @@ def populate_master_menu():
 
 def search():
     # 選択されたカテゴリー名を取得
-    categorie_name = combo_categorie.get()
-    # カテゴリー名に対応する categorie_id を取得
-    categorie_id = None
-    for cat in categories:
-        if cat[1] == categorie_name:
-            categorie_id = cat[0]  # IDを取得
+    category_name = combo_category.get()
+    # カテゴリー名に対応する category_id を取得
+    category_id = None
+    for cat in categorys:
+        if cat[1] == category_name:
+            category_id = cat[0]  # IDを取得
             break
    
     statuse_name = entries["機器状況"].get() 
@@ -96,7 +96,7 @@ def search():
     print(f"機器コード: {equipment_id}")
     print(f"機器名: {name}")
     print(f"機器名カナ: {name_kana}")
-    print(f"分類ID: {categorie_id}")
+    print(f"分類ID: {category_id}")
     print(f"状態ID: {statuse_id}")
     print(f"部門ID: {department_id}")
     print(f"機器状況ID: {department_id}")
@@ -106,7 +106,7 @@ def search():
     print(f"販売元ID: {celler_id}")
     # データ取得
     
-    records = fetch_data(equipment_id, name, name_kana, categorie_id, statuse_id, department_id, room_id , manufacturer_id, celler_id, remarks)
+    records = fetch_data(equipment_id, name, name_kana, category_id, statuse_id, department_id, room_id , manufacturer_id, celler_id, remarks)
     # print(f"レコード内容; {records}")
     # 既存のデータをクリア
     for row in tree.get_children():
@@ -115,7 +115,7 @@ def search():
      # 新しいデータを挿入
     for index, record in enumerate(records):
         # IDに一致する文字情報に変換
-        categorie_name = next((name for id, name in categories if id == record[4]), "不明")        
+        category_name = next((name for id, name in categorys if id == record[4]), "不明")        
         statuse_name = next((name for id, name in statuses if id == record[5]), "不明")
         department_name = next((name for id, name in departments if id == record[6]), "不明")
         room_name = next((name for id, name in rooms if id == record[7]), "不明")
@@ -126,7 +126,7 @@ def search():
         tag = "evenrow" if index % 2 == 0 else "oddrow"
 
         tree.insert("", tk.END, values=(
-            categorie_name, record[1], record[2], statuse_name, department_name, 
+            category_name, record[1], record[2], statuse_name, department_name, 
             room_name, manufacturer_name, celler_name, record[10], record[11], record[12]
         ), tags=(tag,))
         set_fixed_column_widths(tree)
@@ -204,7 +204,7 @@ def on_tree_item_double_click(event):
     if selected_item:
         values = tree.item(selected_item[0], "values")
         equipment_data = {
-            "categorie_name": values[0],
+            "category_name": values[0],
             "equipment_id": values[1],
             "name": values[2],
             "statuse_name": values[3],
@@ -229,7 +229,7 @@ def on_tree_item_double_click(event):
 
 def reset_conditions():
     print("条件初期化ボタンが押されました")
-    combo_categorie.set("")  # コンボボックスの選択をクリア
+    combo_category.set("")  # コンボボックスの選択をクリア
     for key, entry in entries.items():
         if isinstance(entry, ttk.Combobox):  
             entry.set("")  # コンボボックスをクリア
@@ -290,11 +290,11 @@ for i, label in enumerate(labels):
     
     # コンボボックスを使用する項目
     if label == "機器分類":
-        combo_categorie = ttk.Combobox(frame_search, state="readonly")
-        combo_categorie["values"] = [""] + [categorie[1] for categorie in categories]
-        combo_categorie.grid(row=i // 4, column=(i % 4) * 2 + 1, padx=5, pady=5)
-        combo_categorie.set("")
-        entries[label] = combo_categorie
+        combo_category = ttk.Combobox(frame_search, state="readonly")
+        combo_category["values"] = [""] + [category[1] for category in categorys]
+        combo_category.grid(row=i // 4, column=(i % 4) * 2 + 1, padx=5, pady=5)
+        combo_category.set("")
+        entries[label] = combo_category
     elif label == "機器状況":
         combo_statuse = ttk.Combobox(frame_search, state="readonly")
         combo_statuse["values"] = [""] + [statuse[1] for statuse in statuses]

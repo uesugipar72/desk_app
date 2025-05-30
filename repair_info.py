@@ -15,19 +15,19 @@ db_name = "equipment_management.db"
 fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
 
 # 各マスタテーブルからデータ取得
-categories = fetcher.fetch_all("categorie_master")
-statuses = fetcher.fetch_all("statuse_master")
+categorys = fetcher.fetch_all("category_master")
+statuses = fetcher.fetch_all("status_master")
 departments = fetcher.fetch_all("department_master")
 rooms = fetcher.fetch_all("room_master")
 manufacturers = fetcher.fetch_all("manufacturer_master")
 cellers = fetcher.fetch_all("celler_master")
-repaircategories = fetcher.fetch_all("repair_category_master")
-
+repaircategorys = fetcher.fetch_all("repair_category_master")
+repairstatuses = fetcher.fetch_all("repair_status_master")
 # デフォルト値を設定（万が一データがない場合）
-if not categories:
-    categories = [(1, "検査機器"), (2, "一般備品"), (3, "消耗品"), (4, "その他")]
-if not statuses:
-    statuses = [(1, "使用中"), (2, "良好"), (3, "修理中"), (4, "廃棄")]
+if not repaircategorys:
+    repaircategorys = [(1, "随意対応"), (2, "保守対応"), (3, "対応未定"), (4, "修理不能"), (5, "使用不能")]
+if not repairstatuses:
+    repairstatuses = [(1, "修理依頼中"), (2, "修理不能"), (3, "修理完了"), (4, "更新申請中"), (5, "廃棄")]
 if not departments:
     departments = [(1, "検査科"), (2, "検体検査"), (3, "生理検査"), (4, "細菌検査"), (5, "病理検査"), (6, "採血室")]
 
@@ -50,19 +50,31 @@ def get_id_from_name(name, data_list):
 
 def display_repair_history(equipment_id):
     global repair_tree
+
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
+
+    # JOIN を使って各IDに対応する名称を取得
     cursor.execute("""
-        SELECT status, request_date, completion_date, category, vendor, technician
-        FROM repair
-        WHERE equipment_id = ?
-        ORDER BY request_date DESC;
+        SELECT 
+            rs.name AS repairstatus_name,
+            r.request_date,
+            r.completion_date,
+            rc.name AS repaircategory_name,
+            c.name AS vendor_name,
+            r.technician
+        FROM repair r
+        LEFT JOIN repair_status_master rs ON r.repairstatuses = rs.id
+        LEFT JOIN repair_category_master rc ON r.repaircategorys = rc.id
+        LEFT JOIN celler_master c ON r.vendor = c.id
+        WHERE r.equipment_id = ?
+        ORDER BY r.request_date DESC;
     """, (equipment_id,))
     repairs = cursor.fetchall()
     conn.close()
 
-    # Treeview の列設定
-    columns = ["status", "request_date", "completion_date", "category", "vendor", "technician"]
+    # 表示列設定
+    columns = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者"]
 
     if 'repair_tree' not in globals():
         repair_tree = ttk.Treeview(repair_frame, columns=columns, show='headings', height=20)
@@ -75,8 +87,10 @@ def display_repair_history(equipment_id):
         for item in repair_tree.get_children():
             repair_tree.delete(item)
 
+    # データを挿入
     for row in repairs:
         repair_tree.insert('', tk.END, values=row)
+
 def open_edit_repair():
     try:
         if 'repair_tree' not in globals():
@@ -97,7 +111,7 @@ def open_edit_repair():
             db_name=db_name,
             equipment_id=equipment_data["equipment_id"],
             selected_data=selected_data,
-            categories=repaircategories,
+            categorys=repaircategorys,
             vendors=cellers,
             refresh_callback=lambda: display_repair_history(equipment_data["equipment_id"])  # ← 追加
         )
@@ -124,7 +138,7 @@ repair_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 input_vars = {}
 labels = ["カテゴリ名", "器材番号", "器材名", "状態", "部門", "部屋", "製造元", "販売元", "備考", "購入日", "モデル(シリアル)"]
-keys = ["categorie_name", "equipment_id", "name", "statuse_name", "department_name", "room_name", "manufacturer_name", "celler_name", "remarks", "purchase_date", "model"]
+keys = ["category_name", "equipment_id", "name", "statuse_name", "department_name", "room_name", "manufacturer_name", "celler_name", "remarks", "purchase_date", "model"]
 
 for i, (label, key) in enumerate(zip(labels, keys)):
     tk.Label(form_frame, text=label).grid(row=i, column=0, padx=5, pady=3)
