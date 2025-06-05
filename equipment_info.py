@@ -13,7 +13,6 @@ import sqlite3
 import json
 from datetime import datetime
 
-
 db_name = "equipment_management.db"
 fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
 
@@ -203,26 +202,8 @@ def on_tree_item_double_click(event):
     selected_item = tree.selection()
     if selected_item:
         values = tree.item(selected_item[0], "values")
-        equipment_data = {
-            "category_name": values[0],
-            "equipment_id": values[1],
-            "name": values[2],
-            "statuse_name": values[3],
-            "department_name": values[4],
-            "room_name":values[5],
-            "manufacturer_name": values[6],
-            "celler_name": values[7],
-            "remarks": values[8],
-            "purchase_date": values[9],
-            "model": values[10],
-        }
-
-        # JSON文字列に変換
-        equipment_json = json.dumps(equipment_data)
-
-        # subprocessの実行（適切に引数を渡す）
-        # subprocess.run(["python", "equipment_edit.py", equipment_json])
-        subprocess.run(["python", "repair_info.py", equipment_json])
+        equipment_id = values[1]  # 「機器コード」列
+        subprocess.run(["python", "repair_info.py", equipment_id])
         root.focus_force()
         search()
 
