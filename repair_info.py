@@ -65,7 +65,7 @@ def display_repair_history(equipment_id):
         FROM repair r
         LEFT JOIN repair_status_master rs ON r.repairstatuses = rs.id
         LEFT JOIN repair_category_master rc ON r.repaircategories = rc.id
-        LEFT JOIN celler_master c ON r.vendor = c.id
+        LEFT JOIN celler_master c ON r.cellers = c.id
         WHERE r.equipment_id = ?
         ORDER BY r.request_date DESC;
     """, (equipment_id,))
