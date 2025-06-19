@@ -174,7 +174,7 @@ class RepairInfoWindow:
             FROM repair r
             LEFT JOIN repair_status_master rs ON r.repairstatuses = rs.id
             LEFT JOIN repair_category_master rc ON r.repaircategories = rc.id
-            LEFT JOIN celler_master c ON r.cellers = c.id
+            LEFT JOIN celler_master c ON r.vendor = c.id
             WHERE r.equipment_id = ? ORDER BY r.request_date DESC;
         """
         with self._get_db_cursor() as cursor:
@@ -218,6 +218,7 @@ def main():
     """アプリケーションのエントリーポイント。"""
     if len(sys.argv) > 1:
         equipment_id = sys.argv[1]
+        print("DEBUG: equipment_id =", equipment_id)  # ← 追加
         app = RepairInfoWindow(equipment_id=equipment_id)
         app.run()
     else:

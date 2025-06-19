@@ -5,15 +5,18 @@ from tkcalendar import DateEntry
 import sqlite3
 
 class EditRepairWindow(tk.Toplevel):
-    def __init__(self, parent, db_name, equipment_id, selected_data, categories, vendors, refresh_callback=None):
+    def __init__(self, parent, db_name, repair_id, equipment_id, selected_data,
+                 categories, vendors, refresh_callback=None):
         super().__init__(parent)
         self.title("修理情報修正")
         self.db_name = db_name
+        self.repair_id = repair_id
         self.equipment_id = equipment_id
         self.selected_data = selected_data
-        self.categories = categories
-        self.vendors = vendors
-        self.refresh_callback = refresh_callback  # 修理履歴を更新するコールバック
+        self.categories = categories  # List of tuples: [(id, name), ...]
+        self.vendors = vendors        # List of tuples: [(id, name), ...]
+        self.refresh_callback = refresh_callback
+
         self.create_widgets()
         self.populate_fields()
 
@@ -40,7 +43,6 @@ class EditRepairWindow(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.grid(row=len(labels), column=0, columnspan=2, pady=10)
-
         tk.Button(btn_frame, text="保存", command=self.save_changes).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="キャンセル", command=self.destroy).pack(side=tk.LEFT, padx=5)
 
@@ -63,8 +65,24 @@ class EditRepairWindow(tk.Toplevel):
                     widget.delete(0, tk.END)
                     widget.insert(0, value)
 
+    def get_id_from_name(self, name, data_list):
+        """選択名に対応するIDを返す。該当しなければNone。"""
+        for item_id, item_name in data_list:
+            if item_name == name:
+                return item_id
+        return None
+
     def save_changes(self):
         new_values = {key: entry.get() for key, entry in self.entries.items()}
+
+        # カテゴリ名と業者名 → IDに変換
+        
+        category_id = self.get_id_from_name(new_values["カテゴリ"], self.categories)
+        vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
+
+        if category_id is None or vendor_id is None:
+            messagebox.showerror("エラー", "カテゴリまたは業者が無効です。")
+            return
 
         try:
             conn = sqlite3.connect(self.db_name)
@@ -72,17 +90,17 @@ class EditRepairWindow(tk.Toplevel):
 
             cursor.execute("""
                 UPDATE repair
-                SET status = ?, request_date = ?, completion_date = ?, category = ?, vendor = ?, technician = ?
-                WHERE equipment_id = ? AND request_date = ?
+                SET status = ?, request_date = ?, completion_date = ?,
+                    category = ?, vendor = ?, technician = ?
+                WHERE id = ?
             """, (
                 new_values["状態"],
                 new_values["依頼日"],
                 new_values["完了日"],
-                new_values["カテゴリ"],
-                new_values["業者"],
+                category_id,
+                vendor_id,
                 new_values["技術者"],
-                self.equipment_id,
-                self.selected_data[1]
+                self.repair_id
             ))
 
             conn.commit()
@@ -90,7 +108,6 @@ class EditRepairWindow(tk.Toplevel):
             messagebox.showinfo("完了", "修理情報を更新しました。")
             if self.refresh_callback:
                 self.refresh_callback()
-
             self.destroy()
 
         except Exception as e:

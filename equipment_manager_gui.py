@@ -201,7 +201,6 @@ class EquipmentManagerApp:
         if selected:
             values = self.tree.item(selected[0], "values")
             equipment_id = values[1]
-            subprocess.run(["python", "repair_info.py", equipment_id])
             self.root.focus_force()
             self.search()
 
