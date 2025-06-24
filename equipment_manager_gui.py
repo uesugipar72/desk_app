@@ -131,7 +131,6 @@ class EquipmentManagerApp:
         return tree
 
     def search(self):
-        print("検索開始")
         category_name = self.entries["機器分類"].get()
         category_id = next((id for id, name in self.categorys if name == category_name), None)
 
@@ -155,7 +154,17 @@ class EquipmentManagerApp:
         name_kana = self.entries["機器名カナ"].get()
         remarks = self.entries["備考"].get()
 
-        records = fetch_data(equipment_id, name, name_kana, category_id, status_id, department_id, room_id, manufacturer_id, celler_id, remarks)
+        try:
+            records = fetch_data(equipment_id, name, name_kana, category_id, status_id,
+                         department_id, room_id, manufacturer_id, celler_id, remarks)
+            if not records:
+                messagebox.showinfo("情報", "該当するデータがありません。")
+            else:
+                print(f"取得データ数 = {len(records)}")
+        except Exception as e:
+            print(f"fetch_data でエラー: {e}")
+            messagebox.showerror("エラー", f"データ取得中にエラーが発生しました。\n{e}")
+            return
 
         for row in self.tree.get_children():
             self.tree.delete(row)
@@ -201,14 +210,20 @@ class EquipmentManagerApp:
         if selected:
             values = self.tree.item(selected[0], "values")
             equipment_id = values[1]
+            subprocess.run(["python", "repair_info.py", equipment_id])
             self.root.focus_force()
             self.search()
 
 
 def main():
-    root = tk.Tk()
-    app = EquipmentManagerApp(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = EquipmentManagerApp(root)
+        root.mainloop()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        messagebox.showerror("実行エラー", f"アプリケーションでエラーが発生しました：\n{e}")
 
 
 if __name__ == "__main__":

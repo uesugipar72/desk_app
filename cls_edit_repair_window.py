@@ -5,20 +5,43 @@ from tkcalendar import DateEntry
 import sqlite3
 
 class EditRepairWindow(tk.Toplevel):
-    def __init__(self, parent, db_name, repair_id, equipment_id, selected_data,
-                 categories, vendors, refresh_callback=None):
+    def __init__(self, parent, db_name, repair_id, equipment_id, categories, statuses, vendors, refresh_callback=None):
         super().__init__(parent)
         self.title("修理情報修正")
         self.db_name = db_name
         self.repair_id = repair_id
         self.equipment_id = equipment_id
-        self.selected_data = selected_data
-        self.categories = categories  # List of tuples: [(id, name), ...]
-        self.vendors = vendors        # List of tuples: [(id, name), ...]
+        self.categories = categories  # [(id, name), ...]
+        self.statuses = statuses      # [(id, name), ...]
+        self.vendors = vendors        # [(id, name), ...]
         self.refresh_callback = refresh_callback
+
+        # データベースから修理情報を取得
+        self.selected_data = self.fetch_repair_data()
+
+        if not self.selected_data:
+            messagebox.showerror("エラー", f"ID={repair_id} の修理情報が見つかりません。")
+            self.destroy()
+            return
 
         self.create_widgets()
         self.populate_fields()
+
+    def fetch_repair_data(self):
+        """repair_id に対応する修理情報をデータベースから取得する。"""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT id, equipment_id, repairstatuses, repaircategories,
+                           vendor, technician, request_date, completion_date, remarks
+                    FROM repair
+                    WHERE id = ?
+                """, (self.repair_id,))
+                return cursor.fetchone()
+        except Exception as e:
+            messagebox.showerror("DBエラー", f"修理情報取得中にエラーが発生しました:\n{e}")
+            return None
 
     def create_widgets(self):
         labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者"]
@@ -90,9 +113,9 @@ class EditRepairWindow(tk.Toplevel):
 
             cursor.execute("""
                 UPDATE repair
-                SET status = ?, request_date = ?, completion_date = ?,
-                    category = ?, vendor = ?, technician = ?
-                WHERE id = ?
+                SET repairstatuses = ?, request_date = ?, completion_date = ?,
+                    repaircategories = ?, vendor = ?, technician = ?
+                    WHERE id = ?
             """, (
                 new_values["状態"],
                 new_values["依頼日"],
