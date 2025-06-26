@@ -32,14 +32,14 @@ class RepairInfoWindow:
         "status": {"text": "状態", "width": 100},
         "request_date": {"text": "依頼日", "width": 120},
         "completion_date": {"text": "完了日", "width": 120},
-        "category": {"text": "カテゴリ", "width": 100},
+        "repair_type": {"text": "修理種別", "width": 100},
         "vendor": {"text": "業者", "width": 120},
         "technician": {"text": "技術者", "width": 100}
     }
 
     # マスタデータが空だった場合のデフォルト値
     DEFAULT_MASTER_DATA = {
-        "repair_category_master": [(1, "随意対応"), (2, "保守対応"), (3, "対応未定"), (4, "修理不能"), (5, "使用不能")],
+        "repair_type_master": [(1, "随意対応"), (2, "保守対応"), (3, "対応未定"), (4, "修理不能"), (5, "使用不能")],
         "repair_status_master": [(1, "修理依頼中"), (2, "修理不能"), (3, "修理完了"), (4, "更新申請中"), (5, "廃棄")]
     }
 
@@ -81,7 +81,7 @@ class RepairInfoWindow:
         """
         master_tables = [
             "category_master", "status_master", "department_master", "room_master",
-            "manufacturer_master", "celler_master", "repair_category_master", "repair_status_master"
+            "manufacturer_master", "celler_master", "repair_category_master", "repair_status_master", "repair_type_master"
         ]
         lookups = {}
         for table in master_tables:
@@ -173,7 +173,7 @@ class RepairInfoWindow:
                    rc.name, c.name, r.technician
             FROM repair r
             LEFT JOIN repair_status_master rs ON r.repairstatuses = rs.id
-            LEFT JOIN repair_category_master rc ON r.repaircategories = rc.id
+            LEFT JOIN repair_type_master rc ON r.repairtype = rc.id
             LEFT JOIN celler_master c ON r.vendor = c.id
             WHERE r.equipment_id = ? ORDER BY r.request_date DESC;
         """
@@ -197,15 +197,9 @@ class RepairInfoWindow:
         
         repair_id = selected_ids[0]
         try:
-            # 必要なマスタデータを辞書形式で渡す
-            categories = list(self.master_lookups["repair_category_master"].items())
-            statuses = list(self.master_lookups["repair_status_master"].items())
-            vendors = list(self.master_lookups["celler_master"].items())
-
-            EditRepairWindow(
+           EditRepairWindow(
                 parent=self.root, db_name=self.DB_NAME, repair_id=repair_id,
-                equipment_id=self.equipment_id, categories=categories,
-                statuses=statuses, vendors=vendors, refresh_callback=self.refresh_repair_history
+                refresh_callback=self.refresh_repair_history
             )
         except Exception as e:
             messagebox.showerror("例外発生", f"編集ウィンドウの表示中にエラーが発生しました:\n{e}")

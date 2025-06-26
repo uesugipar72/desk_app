@@ -1,22 +1,17 @@
 import tkinter as tk
-from tkinter import messagebox
-from tkinter import ttk
+from tkinter import messagebox, ttk
 from tkcalendar import DateEntry
 import sqlite3
 
 class EditRepairWindow(tk.Toplevel):
-    def __init__(self, parent, db_name, repair_id, equipment_id, categories, statuses, vendors, refresh_callback=None):
+    def __init__(self, parent, db_name, repair_id, refresh_callback=None):
         super().__init__(parent)
         self.title("修理情報修正")
         self.db_name = db_name
         self.repair_id = repair_id
-        self.equipment_id = equipment_id
-        self.categories = categories  # [(id, name), ...]
-        self.statuses = statuses      # [(id, name), ...]
-        self.vendors = vendors        # [(id, name), ...]
         self.refresh_callback = refresh_callback
 
-        # データベースから修理情報を取得
+        # データベースから修理情報・マスタデータを取得
         self.selected_data = self.fetch_repair_data()
 
         if not self.selected_data:
@@ -28,17 +23,36 @@ class EditRepairWindow(tk.Toplevel):
         self.populate_fields()
 
     def fetch_repair_data(self):
-        """repair_id に対応する修理情報をデータベースから取得する。"""
+        """repair_id に対応する修理情報とマスタデータを取得。"""
         try:
             with sqlite3.connect(self.db_name) as conn:
                 cursor = conn.cursor()
+
+                # 修理情報を取得
                 cursor.execute("""
                     SELECT id, equipment_id, repairstatuses, repaircategories,
                            vendor, technician, request_date, completion_date, remarks
                     FROM repair
                     WHERE id = ?
                 """, (self.repair_id,))
-                return cursor.fetchone()
+                data = cursor.fetchone()
+
+                if not data:
+                    return None
+
+                # 各種マスタデータを取得
+                self.equipment_id = data[1]
+
+                cursor.execute("SELECT id, name FROM repair_category_master")
+                self.categories = cursor.fetchall()
+
+                cursor.execute("SELECT id, name FROM repair_status_master")
+                self.statuses = cursor.fetchall()
+
+                cursor.execute("SELECT id, name FROM celler_master")
+                self.vendors = cursor.fetchall()
+                
+                return data
         except Exception as e:
             messagebox.showerror("DBエラー", f"修理情報取得中にエラーが発生しました:\n{e}")
             return None
@@ -53,11 +67,11 @@ class EditRepairWindow(tk.Toplevel):
             if "日" in label:
                 entry = DateEntry(self, date_pattern='yyyy-mm-dd')
             elif label == "カテゴリ":
-                category_names = [name for _, name in self.categories]
-                entry = ttk.Combobox(self, values=category_names, state="readonly")
+                entry = ttk.Combobox(self, values=[name for _, name in self.categories], state="readonly")
+            elif label == "状態":
+                entry = ttk.Combobox(self, values=[name for _, name in self.statuses], state="readonly")
             elif label == "業者":
-                vendor_names = [name for _, name in self.vendors]
-                entry = ttk.Combobox(self, values=vendor_names, state="readonly")
+                entry = ttk.Combobox(self, values=[name for _, name in self.vendors], state="readonly")
             else:
                 entry = tk.Entry(self)
 
@@ -70,13 +84,23 @@ class EditRepairWindow(tk.Toplevel):
         tk.Button(btn_frame, text="キャンセル", command=self.destroy).pack(side=tk.LEFT, padx=5)
 
     def populate_fields(self):
+        labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "備考"]
         if not self.selected_data:
-            messagebox.showerror("エラー", "修理情報が選択されていません。")
-            self.destroy()
+            messagebox.showerror("エラー", "修理情報が取得できませんでした。")
             return
+        repairstatus_id, category_id, vendor_id = self.selected_data[2], self.selected_data[3], self.selected_data[4]
 
-        labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者"]
-        for key, value in zip(labels, self.selected_data):
+        values = [
+            self.get_name_from_id(repairstatus_id, self.statuses),
+            self.selected_data[6],
+            self.selected_data[7],
+            self.get_name_from_id(category_id, self.categories),
+            self.selected_data[5],
+            self.get_name_from_id(vendor_id, self.vendors),
+            self.selected_data[8]  # 備考は技術者の代わりに使用
+        ]
+
+        for key, value in zip(labels, values):
             widget = self.entries.get(key)
             if widget:
                 if isinstance(widget, DateEntry):
@@ -89,45 +113,47 @@ class EditRepairWindow(tk.Toplevel):
                     widget.insert(0, value)
 
     def get_id_from_name(self, name, data_list):
-        """選択名に対応するIDを返す。該当しなければNone。"""
         for item_id, item_name in data_list:
             if item_name == name:
                 return item_id
         return None
 
+    def get_name_from_id(self, id, data_list):
+        for item_id, item_name in data_list:
+            if item_id == id:
+                return item_name
+        return ""
+
     def save_changes(self):
         new_values = {key: entry.get() for key, entry in self.entries.items()}
 
-        # カテゴリ名と業者名 → IDに変換
-        
+        repairstatus_id = self.get_id_from_name(new_values["状態"], self.statuses)
         category_id = self.get_id_from_name(new_values["カテゴリ"], self.categories)
         vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
 
-        if category_id is None or vendor_id is None:
-            messagebox.showerror("エラー", "カテゴリまたは業者が無効です。")
+        if repairstatus_id is None or category_id is None or vendor_id is None:
+            messagebox.showerror("エラー", "マスタの選択値が不正です。")
             return
 
         try:
-            conn = sqlite3.connect(self.db_name)
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                UPDATE repair
-                SET repairstatuses = ?, request_date = ?, completion_date = ?,
-                    repaircategories = ?, vendor = ?, technician = ?
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE repair
+                    SET repairstatuses = ?, request_date = ?, completion_date = ?,
+                        repaircategories = ?, vendor = ?, technician = ?
                     WHERE id = ?
-            """, (
-                new_values["状態"],
-                new_values["依頼日"],
-                new_values["完了日"],
-                category_id,
-                vendor_id,
-                new_values["技術者"],
-                self.repair_id
-            ))
+                """, (
+                    repairstatus_id,
+                    new_values["依頼日"],
+                    new_values["完了日"],
+                    category_id,
+                    vendor_id,
+                    new_values["技術者"],
+                    self.repair_id
+                ))
+                conn.commit()
 
-            conn.commit()
-            conn.close()
             messagebox.showinfo("完了", "修理情報を更新しました。")
             if self.refresh_callback:
                 self.refresh_callback()
