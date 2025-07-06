@@ -91,13 +91,12 @@ class EditRepairWindow(tk.Toplevel):
         repairstatus_id, category_id, vendor_id = self.selected_data[2], self.selected_data[3], self.selected_data[4]
 
         values = [
-            self.get_name_from_id(repairstatus_id, self.statuses),
-            self.selected_data[6],
-            self.selected_data[7],
-            self.get_name_from_id(category_id, self.categories),
-            self.selected_data[5],
-            self.get_name_from_id(vendor_id, self.vendors),
-            self.selected_data[8]  # 備考は技術者の代わりに使用
+            self.get_name_from_id(repairstatus_id, self.statuses),   # 状態
+            self.selected_data[6],                                   # 依頼日
+            self.selected_data[7],                                   # 完了日
+            self.get_name_from_id(category_id, self.categories),     # カテゴリ           
+            self.get_name_from_id(vendor_id, self.vendors),           # 業者
+            self.selected_data[5],                                   # 技術者
         ]
 
         for key, value in zip(labels, values):
