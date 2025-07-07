@@ -105,11 +105,13 @@ class EditRepairWindow(tk.Toplevel):
                 if isinstance(widget, DateEntry):
                     if value:
                         widget.set_date(value)
+                    else:
+                        widget.set_date("")
                 elif isinstance(widget, ttk.Combobox):
                     widget.set(value)
                 else:
                     widget.delete(0, tk.END)
-                    widget.insert(0, value)
+                    widget.insert(0, value or "")
 
     def get_id_from_name(self, name, data_list):
         for item_id, item_name in data_list:
