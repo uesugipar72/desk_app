@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
-from tkcalendar import DateEntry
 import sqlite3
+#import NullableDateEntry
 
 class EditRepairWindow(tk.Toplevel):
     def __init__(self, parent, db_name, repair_id, refresh_callback=None):
@@ -65,7 +65,7 @@ class EditRepairWindow(tk.Toplevel):
             tk.Label(self, text=label).grid(row=i, column=0, padx=5, pady=5)
 
             if "日" in label:
-                entry = DateEntry(self, date_pattern='yyyy-mm-dd')
+                entry = NullableDateEntry(parent)
             elif label == "カテゴリ":
                 entry = ttk.Combobox(self, values=[name for _, name in self.categories], state="readonly")
             elif label == "状態":
