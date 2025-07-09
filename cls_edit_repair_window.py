@@ -3,7 +3,6 @@ from tkinter import messagebox, ttk
 from tkcalendar import DateEntry
 import sqlite3
 from nullable_date_entry import NullableDateEntry
-
 class EditRepairWindow(tk.Toplevel):
     def __init__(self, parent, db_name, repair_id, refresh_callback=None):
         super().__init__(parent)
@@ -66,7 +65,7 @@ class EditRepairWindow(tk.Toplevel):
             tk.Label(self, text=label).grid(row=i, column=0, padx=5, pady=5)
 
             if "日" in label:
-                entry = NullableDateEntry(self)
+                entry = NullableDateEntry(self, date_pattern="yyyy-mm-dd")
             elif label == "カテゴリ":
                 entry = ttk.Combobox(self, values=[name for _, name in self.categories], state="readonly")
             elif label == "状態":
@@ -102,19 +101,15 @@ class EditRepairWindow(tk.Toplevel):
 
         for key, value in zip(labels, values):
             widget = self.entries.get(key)
-            if widget and isinstance(widget, DateEntry):
-                if value:
-                    try:
+            if widget:
+                if isinstance(widget, DateEntry):
+                    if value:
                         widget.set_date(value)
-                    except Exception:
-                        # 万が一 value が不正な文字列でも崩れないよう無視
-                        pass
+                elif isinstance(widget, ttk.Combobox):
+                    widget.set(value)
                 else:
-                # 古いバージョン対応：set_date でエラーになるなら空文字入力欄をクリア
                     widget.delete(0, tk.END)
-            else:
-                widget.delete(0, tk.END)
-                widget.insert(0, value or "")
+                    widget.insert(0, value)
 
     def get_id_from_name(self, name, data_list):
         for item_id, item_name in data_list:
