@@ -185,8 +185,23 @@ class RepairInfoWindow:
             self.repair_tree.insert('', tk.END, iid=row[0], values=row[1:])
 
     def _open_add_repair(self):
-        """修理情報追加ウィンドウを開きます（プレースホルダ）。"""
-        messagebox.showinfo("修理情報追加", "修理情報追加画面を開く処理をここに実装します。")
+        """
+        新規の修理情報入力フォームを開く。
+        repair_id を None にし、equipment_id だけ渡して EditRepairWindow を
+        '追加モード' で起動する。
+        """
+        try:
+            EditRepairWindow(
+                parent=self.root,
+                db_name=self.DB_NAME,
+                repair_id=None,                 # ← ここがポイント
+                refresh_callback=self.refresh_repair_history
+            )
+        except Exception as e:
+            messagebox.showerror(
+                "例外発生",
+                f"修理情報追加ウィンドウの表示中にエラーが発生しました:\n{e}"
+            )
 
     def _open_edit_repair(self):
         """選択された修理情報を修正するウィンドウを開きます。"""

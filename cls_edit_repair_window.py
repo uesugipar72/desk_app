@@ -4,23 +4,42 @@ from tkcalendar import DateEntry
 import sqlite3
 from nullable_date_entry import NullableDateEntry
 class EditRepairWindow(tk.Toplevel):
-    def __init__(self, parent, db_name, repair_id, refresh_callback=None):
+    def __init__(self, parent, db_name, repair_id="", refresh_callback=None):
         super().__init__(parent)
         self.title("修理情報修正")
         self.db_name = db_name
         self.repair_id = repair_id
         self.refresh_callback = refresh_callback
-
+        self.new_mode = (repair_id in (None, "", 0))   # ← ★ 新規判定
+        self.geometry("600x400")
+        self.resizable(False, False)
+        self.entries = {}
+        self.equipment_id = None  # 修理情報に紐づく器材ID
+        # マスタデータは常に取得
+        self._fetch_masters()
         # データベースから修理情報・マスタデータを取得
-        self.selected_data = self.fetch_repair_data()
-
-        if not self.selected_data:
-            messagebox.showerror("エラー", f"ID={repair_id} の修理情報が見つかりません。")
-            self.destroy()
-            return
+        # 既存データ取得
+        self.selected_data = None
+        if not self.new_mode:
+            self.selected_data = self.fetch_repair_data()
+            if not self.selected_data:
+                messagebox.showerror("エラー", f"ID={repair_id} の修理情報が見つかりません。")
+                self.destroy()
+                return
 
         self.create_widgets()
-        self.populate_fields()
+        if self.selected_data:
+            self.populate_fields()
+    # --- マスタ取得だけ分離
+    def _fetch_masters(self):
+        with sqlite3.connect(self.db_name) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id, name FROM repair_category_master")
+            self.categories = cur.fetchall()
+            cur.execute("SELECT id, name FROM repair_status_master")
+            self.statuses = cur.fetchall()
+            cur.execute("SELECT id, name FROM celler_master")
+            self.vendors = cur.fetchall()
 
     def fetch_repair_data(self):
         """repair_id に対応する修理情報とマスタデータを取得。"""
@@ -123,40 +142,67 @@ class EditRepairWindow(tk.Toplevel):
                 return item_name
         return ""
 
+    # --- save_changes ----------
     def save_changes(self):
-        new_values = {key: entry.get() for key, entry in self.entries.items()}
+        new_values = {k: e.get() for k, e in self.entries.items()}
 
         repairstatus_id = self.get_id_from_name(new_values["状態"], self.statuses)
-        category_id = self.get_id_from_name(new_values["カテゴリ"], self.categories)
-        vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
+        category_id     = self.get_id_from_name(new_values["カテゴリ"], self.categories)
+        vendor_id       = self.get_id_from_name(new_values["業者"], self.vendors)
 
-        if repairstatus_id is None or category_id is None or vendor_id is None:
+        if None in (repairstatus_id, category_id, vendor_id):
             messagebox.showerror("エラー", "マスタの選択値が不正です。")
             return
 
         try:
             with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    UPDATE repair
-                    SET repairstatuses = ?, request_date = ?, completion_date = ?,
-                        repaircategories = ?, vendor = ?, technician = ?
-                    WHERE id = ?
-                """, (
-                    repairstatus_id,
-                    new_values["依頼日"],
-                    new_values["完了日"],
-                    category_id,
-                    vendor_id,
-                    new_values["技術者"],
-                    self.repair_id
-                ))
+                cur = conn.cursor()
+
+                if self.new_mode:
+                    # ★ 新規追加：id を MAX(id)+1 で採番
+                    cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM repair")
+                    new_id = cur.fetchone()[0]
+
+                    cur.execute("""
+                        INSERT INTO repair
+                        (id, equipment_id, repairstatuses, request_date, completion_date,
+                         repaircategories, vendor, technician, remarks)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        new_id,
+                        self.equipment_id,
+                        repairstatus_id,
+                        new_values["依頼日"],
+                        new_values["完了日"],
+                        category_id,
+                        vendor_id,
+                        new_values["技術者"],
+                        new_values.get("備考", "")
+                    ))
+                else:
+                    # 既存更新
+                    cur.execute("""
+                        UPDATE repair
+                        SET repairstatuses=?, request_date=?, completion_date=?,
+                            repaircategories=?, vendor=?, technician=?
+                        WHERE id=?
+                    """, (
+                        repairstatus_id,
+                        new_values["依頼日"],
+                        new_values["完了日"],
+                        category_id,
+                        vendor_id,
+                        new_values["技術者"],
+                        self.repair_id
+                    ))
+
                 conn.commit()
 
-            messagebox.showinfo("完了", "修理情報を更新しました。")
+            msg = "修理情報を追加しました。" if self.new_mode else "修理情報を更新しました。"
+            messagebox.showinfo("完了", msg)
             if self.refresh_callback:
                 self.refresh_callback()
             self.destroy()
 
         except Exception as e:
-            messagebox.showerror("エラー", f"データベース更新中にエラーが発生しました: {e}")
+            messagebox.showerror("DBエラー", str(e))
