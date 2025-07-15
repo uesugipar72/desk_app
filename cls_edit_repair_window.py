@@ -1,20 +1,22 @@
+import os
 import tkinter as tk
 from tkinter import messagebox, ttk
+from tkinter import filedialog, simpledialog
 from tkcalendar import DateEntry
 import sqlite3
 from nullable_date_entry import NullableDateEntry
 class EditRepairWindow(tk.Toplevel):
-    def __init__(self, parent, db_name, repair_id="", refresh_callback=None):
+    def __init__(self, parent, db_name, equipment_id=None, repair_id="", refresh_callback=None):
         super().__init__(parent)
         self.title("修理情報修正")
         self.db_name = db_name
         self.repair_id = repair_id
         self.refresh_callback = refresh_callback
-        self.new_mode = (repair_id in (None, "", 0))   # ← ★ 新規判定
+        self.new_mode = (repair_id in (None, "", 0))   # ← ★ 新規判定s
         self.geometry("600x400")
         self.resizable(False, False)
         self.entries = {}
-        self.equipment_id = None  # 修理情報に紐づく器材ID
+        self.equipment_id = equipment_id  # 修理情報に紐づく器材ID
         # マスタデータは常に取得
         self._fetch_masters()
         # データベースから修理情報・マスタデータを取得
@@ -75,7 +77,48 @@ class EditRepairWindow(tk.Toplevel):
         except Exception as e:
             messagebox.showerror("DBエラー", f"修理情報取得中にエラーが発生しました:\n{e}")
             return None
+        
+    def _attach_pdf(self):
+        """PDF を選択 → 文書名入力 → repair_document テーブルへ INSERT"""
+        # ファイル選択ダイアログ
+        pdf_path = filedialog.askopenfilename(
+            parent=self, title="PDF を選択",
+            filetypes=[("PDF ファイル", "*.pdf")])
+        if not pdf_path:
+            return  # キャンセル
 
+        # 文書名入力
+        doc_name = simpledialog.askstring("文書名入力", "添付文書名を入力してください：", parent=self)
+        if not doc_name:
+            messagebox.showwarning("入力なし", "文書名が空です。")
+            return
+
+        # 新規追加モードでまだ保存していない場合は警告
+        if self.new_mode:
+            messagebox.showinfo("先に保存を", "修理レコードを先に保存してから PDF を添付してください。")
+            return
+
+        # ファイルの保存先 URL を作成（例：アプリ配下の docs フォルダにコピー）
+        docs_dir = os.path.join(os.getcwd(), "docs")
+        os.makedirs(docs_dir, exist_ok=True)
+        dest_path = os.path.join(docs_dir, os.path.basename(pdf_path))
+        try:
+            # 同名なら上書きコピー
+            import shutil
+            shutil.copy2(pdf_path, dest_path)
+
+            with sqlite3.connect(self.db_name) as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO repair_document (name, doc_repair_id, doc_url)
+                    VALUES (?, ?, ?)
+                """, (doc_name, self.repair_id, dest_path))
+                conn.commit()
+
+            messagebox.showinfo("完了", "PDF を添付しました。")
+        except Exception as e:
+            messagebox.showerror("DBエラー", f"PDF 添付中にエラーが発生：\n{e}")
+            
     def create_widgets(self):
         labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者"]
         self.entries = {}
@@ -99,6 +142,8 @@ class EditRepairWindow(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.grid(row=len(labels), column=0, columnspan=2, pady=10)
+
+        tk.Button(btn_frame, text="PDF添付", command=self._attach_pdf).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="保存", command=self.save_changes).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="キャンセル", command=self.destroy).pack(side=tk.LEFT, padx=5)
 

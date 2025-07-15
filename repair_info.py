@@ -194,6 +194,7 @@ class RepairInfoWindow:
             EditRepairWindow(
                 parent=self.root,
                 db_name=self.DB_NAME,
+                equipment_id=self.equipment_id, # ★ 器材IDを渡す
                 repair_id=None,                 # ← ここがポイント
                 refresh_callback=self.refresh_repair_history
             )
