@@ -1,10 +1,12 @@
 import os
+import subprocess
 import tkinter as tk
 from tkinter import messagebox, ttk
 from tkinter import filedialog, simpledialog
 from tkcalendar import DateEntry
 import sqlite3
 from nullable_date_entry import NullableDateEntry
+
 class EditRepairWindow(tk.Toplevel):
     def __init__(self, parent, db_name, equipment_id=None, repair_id="", refresh_callback=None):
         super().__init__(parent)
@@ -13,7 +15,7 @@ class EditRepairWindow(tk.Toplevel):
         self.repair_id = repair_id
         self.refresh_callback = refresh_callback
         self.new_mode = (repair_id in (None, "", 0))   # ← ★ 新規判定s
-        self.geometry("600x400")
+        self.geometry("600x600")
         self.resizable(False, False)
         self.entries = {}
         self.equipment_id = equipment_id  # 修理情報に紐づく器材ID
@@ -28,7 +30,8 @@ class EditRepairWindow(tk.Toplevel):
                 messagebox.showerror("エラー", f"ID={repair_id} の修理情報が見つかりません。")
                 self.destroy()
                 return
-
+            self.equipment_id = self.selected_data.get("equipment_id", None)
+        
         self.create_widgets()
         if self.selected_data:
             self.populate_fields()
@@ -120,7 +123,7 @@ class EditRepairWindow(tk.Toplevel):
             messagebox.showerror("DBエラー", f"PDF 添付中にエラーが発生：\n{e}")
             
     def create_widgets(self):
-        labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者"]
+        labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "備考"]
         self.entries = {}
 
         for i, label in enumerate(labels):
@@ -140,12 +143,22 @@ class EditRepairWindow(tk.Toplevel):
             entry.grid(row=i, column=1, padx=5, pady=5)
             self.entries[label] = entry
 
-        btn_frame = tk.Frame(self)
-        btn_frame.grid(row=len(labels), column=0, columnspan=2, pady=10)
 
-        tk.Button(btn_frame, text="PDF添付", command=self._attach_pdf).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="保存", command=self.save_changes).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="キャンセル", command=self.destroy).pack(side=tk.LEFT, padx=5)
+        # --- PDF 一覧のラベルフレームを右側に表示 ---
+        self.pdf_frame = tk.LabelFrame(self, text="添付PDF一覧", padx=10, pady=10)
+        self.pdf_frame.place(x=400, y=20, width=180, height=350)  # 右に配置
+
+        if not self.new_mode:
+            self._display_attached_pdfs()
+
+            btn_frame = tk.Frame(self)
+            btn_frame.grid(row=len(labels), column=0, columnspan=2, pady=10)
+
+            tk.Button(btn_frame, text="PDF添付", command=self._attach_pdf).pack(side=tk.LEFT, padx=5)
+            tk.Button(btn_frame, text="保存", command=self.save_changes).pack(side=tk.LEFT, padx=5)
+            tk.Button(btn_frame, text="キャンセル", command=self.destroy).pack(side=tk.LEFT, padx=5)
+
+
 
     def populate_fields(self):
         labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "備考"]
@@ -186,6 +199,45 @@ class EditRepairWindow(tk.Toplevel):
             if item_id == id:
                 return item_name
         return ""
+    
+    def _display_attached_pdfs(self):
+        """equipment_id に紐づく PDF 一覧を表示する"""
+        if not self.equipment_id:
+            return
+
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT name, doc_url FROM repair_document
+                    WHERE doc_repair_id IN (
+                        SELECT id FROM repair_table WHERE equipment_id = ?
+                    )
+                """, (self.equipment_id,))
+                pdfs = cur.fetchall()
+
+            for i, (name, url) in enumerate(pdfs):
+                label = tk.Label(self.pdf_frame, text=name, fg="blue", cursor="hand2", anchor="w", wraplength=150)
+                label.grid(row=i, column=0, sticky="w")
+                label.bind("<Button-1>", lambda e, path=url: self._open_pdf(path))
+
+        except Exception as e:
+            messagebox.showerror("PDF表示エラー", f"PDF一覧の取得中にエラーが発生:\n{e}")
+    
+    def _open_pdf(self, path):
+        """クリックでPDFを開く"""
+        if not os.path.exists(path):
+            messagebox.showwarning("ファイルなし", f"{path} が存在しません。")
+            return
+        try:
+            if os.name == "nt":  # Windows
+                os.startfile(path)
+            elif os.name == "posix":
+                subprocess.run(["xdg-open", path])
+            else:
+                messagebox.showinfo("未対応", "PDFの自動オープンはこのOSでは未対応です。")
+        except Exception as e:
+            messagebox.showerror("エラー", f"PDFの表示中にエラーが発生しました：\n{e}")
 
     # --- save_changes ----------
     def save_changes(self):
