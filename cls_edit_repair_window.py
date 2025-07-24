@@ -8,7 +8,7 @@ import sqlite3
 from nullable_date_entry import NullableDateEntry
 
 class EditRepairWindow(tk.Toplevel):
-    def __init__(self, parent, db_name, equipment_id=None, repair_id="", refresh_callback=None):
+    def __init__(self, parent, db_name, equipment_id=None, repair_id=None, refresh_callback=None):
         super().__init__(parent)
         self.title("修理情報修正")
         self.db_name = db_name
@@ -40,46 +40,58 @@ class EditRepairWindow(tk.Toplevel):
         with sqlite3.connect(self.db_name) as conn:
             cur = conn.cursor()
             cur.execute("SELECT id, name FROM repair_category_master")
-            self.categories = cur.fetchall()
+            rows = cur.fetchall()
+            self.categories = dict(rows) if rows else {}
+
             cur.execute("SELECT id, name FROM repair_status_master")
-            self.statuses = cur.fetchall()
+            rows = cur.fetchall()
+            self.statuses = dict(rows) if rows else {}
+
             cur.execute("SELECT id, name FROM celler_master")
-            self.vendors = cur.fetchall()
+            rows = cur.fetchall()
+            self.vendors = dict(rows) if rows else {}
 
     def fetch_repair_data(self):
         """repair_id に対応する修理情報とマスタデータを取得。"""
+        if not self.repair_id:
+            return None
         try:
             with sqlite3.connect(self.db_name) as conn:
+                conn.row_factory = sqlite3.Row  # dict のように扱える
                 cursor = conn.cursor()
 
                 # 修理情報を取得
                 cursor.execute("""
                     SELECT id, equipment_id, repairstatuses, repaircategories,
-                           vendor, technician, request_date, completion_date, remarks
+                        vendor, technician, request_date, completion_date, remarks
                     FROM repair
                     WHERE id = ?
                 """, (self.repair_id,))
-                data = cursor.fetchone()
+                row = cursor.fetchone()
+                data = dict(row) if row else None
 
                 if not data:
                     return None
 
-                # 各種マスタデータを取得
-                self.equipment_id = data[1]
+                # 修理に紐づく器材IDを保存
+                self.equipment_id = data["equipment_id"]  # ← ここを修正
 
+                # 各種マスタ再取得
                 cursor.execute("SELECT id, name FROM repair_category_master")
-                self.categories = cursor.fetchall()
+                self.categories = dict(cursor.fetchall())
 
                 cursor.execute("SELECT id, name FROM repair_status_master")
-                self.statuses = cursor.fetchall()
+                self.statuses = dict(cursor.fetchall())
 
                 cursor.execute("SELECT id, name FROM celler_master")
-                self.vendors = cursor.fetchall()
-                
+                self.vendors = dict(cursor.fetchall())
+
                 return data
+
         except Exception as e:
             messagebox.showerror("DBエラー", f"修理情報取得中にエラーが発生しました:\n{e}")
             return None
+
         
     def _attach_pdf(self):
         """PDF を選択 → 文書名入力 → repair_document テーブルへ INSERT"""
@@ -132,11 +144,13 @@ class EditRepairWindow(tk.Toplevel):
             if "日" in label:
                 entry = NullableDateEntry(self, date_pattern="yyyy-mm-dd")
             elif label == "カテゴリ":
-                entry = ttk.Combobox(self, values=[name for _, name in self.categories], state="readonly")
+                entry = ttk.Combobox(self, values=list(self.categories.values()), state="readonly")
             elif label == "状態":
-                entry = ttk.Combobox(self, values=[name for _, name in self.statuses], state="readonly")
+                entry = ttk.Combobox(self, values=list(self.statuses.values()), state="readonly")
             elif label == "業者":
-                entry = ttk.Combobox(self, values=[name for _, name in self.vendors], state="readonly")
+                entry = ttk.Combobox(self, values=list(self.vendors.values()), state="readonly")
+            elif label == "備考":
+                entry = tk.Entry(self, width=40)
             else:
                 entry = tk.Entry(self)
 
@@ -165,15 +179,20 @@ class EditRepairWindow(tk.Toplevel):
         if not self.selected_data:
             messagebox.showerror("エラー", "修理情報が取得できませんでした。")
             return
-        repairstatus_id, category_id, vendor_id = self.selected_data[2], self.selected_data[3], self.selected_data[4]
+        
+        # ID（int）で取得（カンマ不要）
+        repairstatus_id = self.selected_data["repairstatuses"]
+        category_id = self.selected_data["repaircategories"]
+        vendor_id = self.selected_data["vendor"]
 
         values = [
             self.get_name_from_id(repairstatus_id, self.statuses),   # 状態
-            self.selected_data[6],                                   # 依頼日
-            self.selected_data[7],                                   # 完了日
-            self.get_name_from_id(category_id, self.categories),     # カテゴリ           
-            self.get_name_from_id(vendor_id, self.vendors),           # 業者
-            self.selected_data[5],                                   # 技術者
+            self.selected_data["request_date"],                      # 依頼日
+            self.selected_data["completion_date"],                   # 完了日
+            self.get_name_from_id(category_id, self.categories),     # カテゴリ
+            self.get_name_from_id(vendor_id, self.vendors),          # 業者
+            self.selected_data["technician"],                        # 技術者
+            self.selected_data["remarks"]                            # 備考
         ]
 
         for key, value in zip(labels, values):
@@ -188,17 +207,17 @@ class EditRepairWindow(tk.Toplevel):
                     widget.delete(0, tk.END)
                     widget.insert(0, value)
 
-    def get_id_from_name(self, name, data_list):
-        for item_id, item_name in data_list:
+    def get_id_from_name(self, name: str, data_dict: dict) -> int | None:
+        """名前からIDを取得（辞書型で）"""
+        for item_id, item_name in data_dict.items():
             if item_name == name:
                 return item_id
         return None
 
-    def get_name_from_id(self, id, data_list):
-        for item_id, item_name in data_list:
-            if item_id == id:
-                return item_name
-        return ""
+    def get_name_from_id(self, id: int, data_dict: dict) -> str:
+        """IDから名前を取得（辞書型で）"""
+        return data_dict.get(id, "")
+
     
     def _display_attached_pdfs(self):
         """equipment_id に紐づく PDF 一覧を表示する"""
@@ -211,7 +230,7 @@ class EditRepairWindow(tk.Toplevel):
                 cur.execute("""
                     SELECT name, doc_url FROM repair_document
                     WHERE doc_repair_id IN (
-                        SELECT id FROM repair_table WHERE equipment_id = ?
+                        SELECT id FROM repair WHERE equipment_id = ?
                     )
                 """, (self.equipment_id,))
                 pdfs = cur.fetchall()
