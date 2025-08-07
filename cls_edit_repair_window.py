@@ -220,8 +220,8 @@ class EditRepairWindow(tk.Toplevel):
 
     
     def _display_attached_pdfs(self):
-        """equipment_id に紐づく PDF 一覧を表示する"""
-        if not self.equipment_id:
+        """repair_id に紐づく PDF 一覧を表示する"""
+        if not self.repair_id:
             return
 
         try:
@@ -229,10 +229,8 @@ class EditRepairWindow(tk.Toplevel):
                 cur = conn.cursor()
                 cur.execute("""
                     SELECT name, doc_url FROM repair_document
-                    WHERE doc_repair_id IN (
-                        SELECT id FROM repair WHERE equipment_id = ?
-                    )
-                """, (self.equipment_id,))
+                    WHERE doc_repair_id = ?
+                """, (self.repair_id,))
                 pdfs = cur.fetchall()
 
             for i, (name, url) in enumerate(pdfs):
@@ -242,6 +240,7 @@ class EditRepairWindow(tk.Toplevel):
 
         except Exception as e:
             messagebox.showerror("PDF表示エラー", f"PDF一覧の取得中にエラーが発生:\n{e}")
+
     
     def _open_pdf(self, path):
         """クリックでPDFを開く"""
