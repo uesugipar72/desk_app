@@ -273,47 +273,44 @@ class EditRepairWindow(tk.Toplevel):
             with sqlite3.connect(self.db_name) as conn:
                 cur = conn.cursor()
 
+                # 登録/更新で共通の値
+                params = [
+                    repairstatus_id,
+                    new_values.get("依頼日", ""),
+                    new_values.get("完了日", ""),
+                    category_id,
+                    vendor_id,
+                    new_values.get("技術者", ""),
+                    new_values.get("備考", "")
+                ]
+
                 if self.new_mode:
-                    # ★ 新規追加：id を MAX(id)+1 で採番
+                    # 新規用のID取得
                     cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM repair")
                     new_id = cur.fetchone()[0]
 
                     cur.execute("""
                         INSERT INTO repair
                         (id, equipment_id, repairstatuses, request_date, completion_date,
-                         repaircategories, vendor, technician, remarks)
+                        repaircategories, vendor, technician, remarks)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        new_id,
-                        self.equipment_id,
-                        repairstatus_id,
-                        new_values["依頼日"],
-                        new_values["完了日"],
-                        category_id,
-                        vendor_id,
-                        new_values["技術者"],
-                        new_values.get("備考", "")
-                    ))
+                    """, [new_id, self.equipment_id] + params)
+
+                    msg = "修理情報を追加しました。"
+
                 else:
-                    # 既存更新
+                    # 更新処理
                     cur.execute("""
                         UPDATE repair
                         SET repairstatuses=?, request_date=?, completion_date=?,
-                            repaircategories=?, vendor=?, technician=?
+                            repaircategories=?, vendor=?, technician=?, remarks=?
                         WHERE id=?
-                    """, (
-                        repairstatus_id,
-                        new_values["依頼日"],
-                        new_values["完了日"],
-                        category_id,
-                        vendor_id,
-                        new_values["技術者"],
-                        self.repair_id
-                    ))
+                    """, params + [self.repair_id])
+
+                    msg = "修理情報を更新しました。"
 
                 conn.commit()
 
-            msg = "修理情報を追加しました。" if self.new_mode else "修理情報を更新しました。"
             messagebox.showinfo("完了", msg)
             if self.refresh_callback:
                 self.refresh_callback()
