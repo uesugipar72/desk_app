@@ -34,7 +34,8 @@ class RepairInfoWindow:
         "completion_date": {"text": "完了日", "width": 120},
         "repair_type": {"text": "修理種別", "width": 100},
         "vendor": {"text": "業者", "width": 120},
-        "technician": {"text": "技術者", "width": 100}
+        "technician": {"text": "技術者", "width": 100},
+        "remarks": {"text": "備考", "width": 200}
     }
 
     # マスタデータが空だった場合のデフォルト値
@@ -152,7 +153,9 @@ class RepairInfoWindow:
             "room_name": self.master_lookups["room_master"].get(data[7], "不明"),
             "manufacturer_name": self.master_lookups["manufacturer_master"].get(data[8], "不明"),
             "celler_name": self.master_lookups["celler_master"].get(data[9], "不明"),
-            "remarks": data[10], "purchase_date": data[11], "model": data[12]
+            "remarks": data[10], 
+            "purchase_date": data[11], 
+            "model": data[12]
         }
         
         self._update_form()
@@ -170,7 +173,7 @@ class RepairInfoWindow:
         
         query = """
             SELECT r.id, rs.name, r.request_date, r.completion_date,
-                   rc.name, c.name, r.technician
+                   rc.name, c.name, r.technician, r.remarks
             FROM repair r
             LEFT JOIN repair_status_master rs ON r.repairstatuses = rs.id
             LEFT JOIN repair_type_master rc ON r.repairtype = rc.id
