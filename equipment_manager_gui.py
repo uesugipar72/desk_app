@@ -241,7 +241,7 @@ class EquipmentManagerApp:
         except Exception as e:
             messagebox.showerror("エラー", f"編集画面を開く際にエラーが発生しました:\n{e}")
 
-    def on_tree_item_double_click(self):
+    def on_tree_item_double_click(self, event):
         self.open_equipment_edit()
 
     def show_context_menu(self, event):
