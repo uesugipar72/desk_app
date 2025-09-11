@@ -1,8 +1,10 @@
 .venv/
 済/
 # Python キャッシュファイル
-*.pyc
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 # Excelファイルを無視
 *.xlsx
 *.xls
