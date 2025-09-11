@@ -1,145 +1,245 @@
-# import subprocess
-# import os
 import sys
-import json
-from tkinter import ttk
-import tkinter as tk
-from tkinter import messagebox
-from tkcalendar import DateEntry
-from cls_master_data_fetcher import MasterDataFetcher
 import sqlite3
-from cls_new_equipment_number import EquipmentManager
-from cls_edit_repair_window import EditRepairWindow  # 追加
-# データベース接続設定
-db_name = "equipment_management.db"
-fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
+import tkinter as tk
+from tkinter import ttk, messagebox
+from contextlib import contextmanager
+from typing import Dict, Any, List, Tuple, Iterator
 
-# 各マスタテーブルからデータ取得
-categories = fetcher.fetch_all("categorie_master")
-statuses = fetcher.fetch_all("statuse_master")
-departments = fetcher.fetch_all("department_master")
-rooms = fetcher.fetch_all("room_master")
-manufacturers = fetcher.fetch_all("manufacturer_master")
-cellers = fetcher.fetch_all("celler_master")
+# 外部モジュールのインポート
+from cls_master_data_fetcher import MasterDataFetcher
+from cls_edit_repair_window import EditRepairWindow
 
-# デフォルト値を設定（万が一データがない場合）
-if not categories:
-    categories = [(1, "検査機器"), (2, "一般備品"), (3, "消耗品"), (4, "その他")]
-if not statuses:
-    statuses = [(1, "使用中"), (2, "良好"), (3, "修理中"), (4, "廃棄")]
-if not departments:
-    departments = [(1, "検査科"), (2, "検体検査"), (3, "生理検査"), (4, "細菌検査"), (5, "病理検査"), (6, "採血室")]
+class RepairInfoWindow:
+    """
+    器材情報と修理履歴を管理する高効率・高メンテナンス性ウィンドウクラス。
 
-# コマンドライン引数からデータを取得
-if len(sys.argv) > 1:
-    try:
-        equipment_data = json.loads(sys.argv[1])
-    except json.JSONDecodeError:
-        messagebox.showerror("エラー", "データの読み込みに失敗しました。")
+    定数の一元化、DB接続のコンテキスト管理、マスタデータの事前キャッシュにより、
+    コードの可読性、保守性、パフォーマンスを向上させています。
+    """
+    # --- 定数の一元管理 ---
+    DB_NAME = "equipment_management.db"
+
+    # フォームの構成情報 (ラベルテキスト, データ辞書のキー)
+    FORM_CONFIG = [
+        ("カテゴリ名", "category_name"), ("器材番号", "equipment_id"),
+        ("器材名", "name"), ("状態", "status_name"), ("部門", "department_name"),
+        ("部屋", "room_name"), ("製造元", "manufacturer_name"), ("販売元", "celler_name"),
+        ("備考", "remarks"), ("購入日", "purchase_date"), ("モデル(シリアル)", "model")
+    ]
+
+    # 修理履歴Treeviewの構成情報 (内部名: {表示テキスト, 幅})
+    REPAIR_HISTORY_COLUMNS = {
+        "status": {"text": "状態", "width": 100},
+        "request_date": {"text": "依頼日", "width": 120},
+        "completion_date": {"text": "完了日", "width": 120},
+        "repair_type": {"text": "修理種別", "width": 100},
+        "vendor": {"text": "業者", "width": 120},
+        "technician": {"text": "技術者", "width": 100},
+        "remarks": {"text": "備考", "width": 200}
+    }
+
+    # マスタデータが空だった場合のデフォルト値
+    DEFAULT_MASTER_DATA = {
+        "repair_type_master": [(1, "随意対応"), (2, "保守対応"), (3, "対応未定"), (4, "修理不能"), (5, "使用不能")],
+        "repair_status_master": [(1, "修理依頼中"), (2, "修理不能"), (3, "修理完了"), (4, "更新申請中"), (5, "廃棄")]
+    }
+
+    def __init__(self, equipment_id: str):
+        """
+        ウィンドウを初期化し、UIとデータをセットアップします。
+        Args:
+            equipment_id (str): 表示する器材のID。
+        """
+        self.root = tk.Tk()
+        self.root.title("器材情報（参照）")
+
+        self.equipment_id = equipment_id
+        self.fetcher = MasterDataFetcher(self.DB_NAME)
+        
+        # --- パフォーマンス向上のためのデータキャッシュ ---
+        self.master_lookups = self._load_all_master_data_as_lookup()
+        
+        self.equipment_data: Dict[str, Any] = {}
+        self.input_vars: Dict[str, tk.StringVar] = {}
+        self.repair_tree: ttk.Treeview = None
+        
+        self._setup_ui()
+        self._load_and_display_data()
+
+    @contextmanager
+    def _get_db_cursor(self) -> Iterator[sqlite3.Cursor]:
+        """データベース接続を管理するコンテキストマネージャ。"""
+        conn = sqlite3.connect(self.DB_NAME)
+        try:
+            yield conn.cursor()
+        finally:
+            conn.close()
+
+    def _load_all_master_data_as_lookup(self) -> Dict[str, Dict[int, str]]:
+        """
+        全てのマスタデータを読み込み、ID->名称の辞書（ルックアップテーブル）としてキャッシュする。
+        これにより、名称検索時のDBアクセスが不要になり、パフォーマンスが向上します。
+        """
+        master_tables = [
+            "category_master", "status_master", "department_master", "room_master",
+            "manufacturer_master", "celler_master", "repair_category_master", "repair_status_master", "repair_type_master"
+        ]
+        lookups = {}
+        for table in master_tables:
+            data = self.fetcher.fetch_all(table) or self.DEFAULT_MASTER_DATA.get(table, [])
+            lookups[table] = {id: name for id, name in data}
+        return lookups
+
+    def _setup_ui(self):
+        """ウィンドウのUIウィジェットをセットアップします。"""
+        main_frame = tk.Frame(self.root)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        form_frame = tk.Frame(main_frame)
+        form_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        
+        repair_frame = tk.Frame(main_frame)
+        repair_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        self._create_form_widgets(form_frame)
+        self._create_repair_history_widgets(repair_frame)
+
+    def _create_form_widgets(self, parent: tk.Frame):
+        """設定（FORM_CONFIG）に基づき、情報表示フォームを作成します。"""
+        for i, (label, key) in enumerate(self.FORM_CONFIG):
+            tk.Label(parent, text=label).grid(row=i, column=0, padx=5, pady=3, sticky="w")
+            var = tk.StringVar()
+            self.input_vars[key] = var
+            tk.Entry(parent, textvariable=var, state="readonly", width=30).grid(row=i, column=1, padx=5, pady=3, sticky="we")
+
+        button_frame = tk.Frame(parent)
+        button_frame.grid(row=len(self.FORM_CONFIG), column=0, columnspan=2, pady=20)
+        tk.Button(button_frame, text="修理情報追加", command=self._open_add_repair).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="修理情報修正", command=self._open_edit_repair).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="戻る", command=self.root.destroy).pack(side=tk.LEFT, padx=5)
+
+    def _create_repair_history_widgets(self, parent: tk.Frame):
+        """設定（REPAIR_HISTORY_COLUMNS）に基づき、修理履歴Treeviewを作成します。"""
+        columns_ids = list(self.REPAIR_HISTORY_COLUMNS.keys())
+        self.repair_tree = ttk.Treeview(parent, columns=columns_ids, show='headings')
+        
+        for col_id in columns_ids:
+            config = self.REPAIR_HISTORY_COLUMNS[col_id]
+            self.repair_tree.heading(col_id, text=config["text"])
+            self.repair_tree.column(col_id, width=config["width"], anchor='center')
+        
+        scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=self.repair_tree.yview)
+        self.repair_tree.configure(yscrollcommand=scrollbar.set)
+        
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.repair_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    def _load_and_display_data(self):
+        """データベースから器材情報を取得し、UIに表示します。"""
+        with self._get_db_cursor() as cursor:
+            cursor.execute("SELECT * FROM equipment WHERE equipment_id = ?", (self.equipment_id,))
+            data = cursor.fetchone()
+
+        if not data:
+            messagebox.showerror("データエラー", f"器材ID = {self.equipment_id} のデータが見つかりません。")
+            self.root.destroy()
+            return
+
+        self.equipment_data = {
+            "id": data[0], "equipment_id": data[1], "name": data[2],
+            "category_name": self.master_lookups["category_master"].get(data[4], "不明"),
+            "status_name": self.master_lookups["status_master"].get(data[5], "不明"),
+            "department_name": self.master_lookups["department_master"].get(data[6], "不明"),
+            "room_name": self.master_lookups["room_master"].get(data[7], "不明"),
+            "manufacturer_name": self.master_lookups["manufacturer_master"].get(data[8], "不明"),
+            "celler_name": self.master_lookups["celler_master"].get(data[9], "不明"),
+            "remarks": data[10], 
+            "purchase_date": data[11], 
+            "model": data[12]
+        }
+        
+        self._update_form()
+        self.refresh_repair_history()
+
+    def _update_form(self):
+        """フォームの各入力欄に最新の器材情報を表示します。"""
+        for key, var in self.input_vars.items():
+            var.set(self.equipment_data.get(key, ""))
+
+    def refresh_repair_history(self):
+        """修理履歴をデータベースから再取得し、Treeviewを更新します。"""
+        for item in self.repair_tree.get_children():
+            self.repair_tree.delete(item)
+        
+        query = """
+            SELECT r.id, rs.name, r.request_date, r.completion_date,
+                   rc.name, c.name, r.technician, r.remarks
+            FROM repair r
+            LEFT JOIN repair_status_master rs ON r.repairstatuses = rs.id
+            LEFT JOIN repair_type_master rc ON r.repairtype = rc.id
+            LEFT JOIN celler_master c ON r.vendor = c.id
+            WHERE r.equipment_id = ? ORDER BY r.request_date DESC;
+        """
+        with self._get_db_cursor() as cursor:
+            cursor.execute(query, (self.equipment_data['equipment_id'],))
+            repairs = cursor.fetchall()
+
+        for row in repairs:
+            self.repair_tree.insert('', tk.END, iid=row[0], values=row[1:])
+
+    def _open_add_repair(self):
+        """
+        新規の修理情報入力フォームを開く。
+        repair_id を None にし、equipment_id だけ渡して EditRepairWindow を
+        '追加モード' で起動する。
+        """
+        try:
+            EditRepairWindow(
+                parent=self.root,
+                db_name=self.DB_NAME,
+                equipment_id=self.equipment_id, # ★ 器材IDを渡す
+                repair_id=None,                 # ← ここがポイント
+                refresh_callback=self.refresh_repair_history
+            )
+        except Exception as e:
+            messagebox.showerror(
+                "例外発生",
+                f"修理情報追加ウィンドウの表示中にエラーが発生しました:\n{e}"
+            )
+
+    def _open_edit_repair(self):
+        """選択された修理情報を修正するウィンドウを開きます。"""
+        selected_ids = self.repair_tree.selection()
+        if not selected_ids:
+            messagebox.showwarning("選択なし", "修正する修理情報を選択してください。")
+            return
+        
+        repair_id = selected_ids[0]
+        try:
+           EditRepairWindow(
+                parent=self.root, db_name=self.DB_NAME, repair_id=repair_id,
+                refresh_callback=self.refresh_repair_history
+            )
+        except Exception as e:
+            messagebox.showerror("例外発生", f"編集ウィンドウの表示中にエラーが発生しました:\n{e}")
+
+    def run(self):
+        """メインループを開始し、ウィンドウを表示します。"""
+        self.root.mainloop()
+
+def main():
+    """アプリケーションのエントリーポイント。"""
+    if len(sys.argv) > 1:
+        equipment_id = sys.argv[1]
+        print("DEBUG: equipment_id =", equipment_id)  # ← 追加
+        app = RepairInfoWindow(equipment_id=equipment_id)
+        app.run()
+    else:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("引数エラー", "器材IDが指定されていません。")
+        print(f"使用法: python {sys.argv[0]} <equipment_id>")
         sys.exit(1)
-else:
-    equipment_data = {}
 
-def get_id_from_name(name, data_list):
-    """名称に対応するIDを取得する"""
-    for item_id, item_name in data_list:
-        if item_name == name:
-            return item_id
-    return None  # 該当なしの場合はNone
-
-def display_repair_history(equipment_id):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT status, request_date, completion_date, category, vendor, technician
-        FROM repair
-        WHERE equipment_id = ?
-        ORDER BY request_date DESC;
-    """, (equipment_id,))
-    repairs = cursor.fetchall()
-    conn.close()
-
-    # Treeview の列設定
-    columns = ["status", "request_date", "completion_date", "category", "vendor", "technician"]
-    tree = ttk.Treeview(repair_frame, columns=columns, show='headings', height=20)
-    for col in columns:
-        tree.heading(col, text=col)
-        tree.column(col, width=100, anchor='center')
-    tree.pack(fill=tk.BOTH, expand=True)
-
-    for row in repairs:
-        tree.insert('', tk.END, values=row)
-def open_edit_repair():
-    # Treeviewの子アイテムを取得
-    children = repair_frame.winfo_children()
-    tree = None
-    for child in children:
-        if isinstance(child, ttk.Treeview):
-            tree = child
-            break
-
-    if tree is None:
-        messagebox.showerror("エラー", "修理履歴が見つかりません。")
-        return
-
-    selected = tree.selection()
-    if not selected:
-        messagebox.showwarning("選択なし", "修正する修理情報を選択してください。")
-        return
-
-    selected_data = tree.item(selected[0], "values")
-
-    EditRepairWindow(root_edit, db_name, equipment_data["equipment_id"], selected_data)
-
-# キャンセル関数
-def cancel_edit():
-    root_edit.destroy()
-
-# メインウィンドウ
-root_edit = tk.Tk()
-root_edit.title("器材情報（参照）")
-
-# メインウィンドウレイアウト調整
-main_frame = tk.Frame(root_edit)
-main_frame.pack(fill=tk.BOTH, expand=True)
-
-form_frame = tk.Frame(main_frame)
-form_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
-
-repair_frame = tk.Frame(main_frame)
-repair_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-input_vars = {}
-labels = ["カテゴリ名", "器材番号", "器材名", "状態", "部門", "部屋", "製造元", "販売元", "備考", "購入日", "モデル(シリアル)"]
-keys = ["categorie_name", "equipment_id", "name", "statuse_name", "department_name", "room_name", "manufacturer_name", "celler_name", "remarks", "purchase_date", "model"]
-
-for i, (label, key) in enumerate(zip(labels, keys)):
-    tk.Label(form_frame, text=label).grid(row=i, column=0, padx=5, pady=3)
-    var = tk.StringVar(value=equipment_data.get(key, ""))
-    input_vars[key] = var
-
-    entry = tk.Entry(form_frame, textvariable=var, state="readonly")
-    entry.grid(row=i, column=1, padx=5, pady=3)
-
-# --- ボタンエリア ---
-button_frame = tk.Frame(form_frame)
-button_frame.grid(row=len(labels), column=0, columnspan=2, pady=20)
-
-def open_add_repair():
-    messagebox.showinfo("修理情報追加", "修理情報追加画面を開く処理をここに記述してください。")
-
-
-btn_add_repair = tk.Button(button_frame, text="修理情報追加", command=open_add_repair)
-btn_add_repair.pack(side=tk.LEFT, padx=5)
-
-btn_edit_repair = tk.Button(button_frame, text="修理情報修正", command=open_edit_repair)
-btn_edit_repair.pack(side=tk.LEFT, padx=5)
-
-btn_cancel = tk.Button(button_frame, text="戻る", command=root_edit.destroy)
-btn_cancel.pack(side=tk.LEFT, padx=5)
-
-# --- 修理履歴表示 ---
-if equipment_data.get("equipment_id"):
-    display_repair_history(equipment_data["equipment_id"])
-
-root_edit.mainloop()
+if __name__ == "__main__":
+    main()
