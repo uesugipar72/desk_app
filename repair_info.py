@@ -34,7 +34,8 @@ class RepairInfoWindow:
         "completion_date": {"text": "完了日", "width": 120},
         "repair_type": {"text": "修理種別", "width": 100},
         "vendor": {"text": "業者", "width": 120},
-        "technician": {"text": "技術者", "width": 100}
+        "technician": {"text": "技術者", "width": 100},
+        "remarks": {"text": "備考", "width": 200}
     }
 
     # マスタデータが空だった場合のデフォルト値
@@ -152,7 +153,9 @@ class RepairInfoWindow:
             "room_name": self.master_lookups["room_master"].get(data[7], "不明"),
             "manufacturer_name": self.master_lookups["manufacturer_master"].get(data[8], "不明"),
             "celler_name": self.master_lookups["celler_master"].get(data[9], "不明"),
-            "remarks": data[10], "purchase_date": data[11], "model": data[12]
+            "remarks": data[10], 
+            "purchase_date": data[11], 
+            "model": data[12]
         }
         
         self._update_form()
@@ -170,7 +173,7 @@ class RepairInfoWindow:
         
         query = """
             SELECT r.id, rs.name, r.request_date, r.completion_date,
-                   rc.name, c.name, r.technician
+                   rc.name, c.name, r.technician, r.remarks
             FROM repair r
             LEFT JOIN repair_status_master rs ON r.repairstatuses = rs.id
             LEFT JOIN repair_type_master rc ON r.repairtype = rc.id
@@ -185,8 +188,24 @@ class RepairInfoWindow:
             self.repair_tree.insert('', tk.END, iid=row[0], values=row[1:])
 
     def _open_add_repair(self):
-        """修理情報追加ウィンドウを開きます（プレースホルダ）。"""
-        messagebox.showinfo("修理情報追加", "修理情報追加画面を開く処理をここに実装します。")
+        """
+        新規の修理情報入力フォームを開く。
+        repair_id を None にし、equipment_id だけ渡して EditRepairWindow を
+        '追加モード' で起動する。
+        """
+        try:
+            EditRepairWindow(
+                parent=self.root,
+                db_name=self.DB_NAME,
+                equipment_id=self.equipment_id, # ★ 器材IDを渡す
+                repair_id=None,                 # ← ここがポイント
+                refresh_callback=self.refresh_repair_history
+            )
+        except Exception as e:
+            messagebox.showerror(
+                "例外発生",
+                f"修理情報追加ウィンドウの表示中にエラーが発生しました:\n{e}"
+            )
 
     def _open_edit_repair(self):
         """選択された修理情報を修正するウィンドウを開きます。"""

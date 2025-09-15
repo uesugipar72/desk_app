@@ -18,7 +18,7 @@ class EquipmentManagerApp:
         self.root = root
         self.root.title("器材管理システム")
         self.root.geometry("1400x750")
-        self.db_name = "equipment_management.db"
+        self.db_name = self._load_db_path()
 
         self.fetcher = MasterDataFetcher(self.db_name)
         self.entries = {}
@@ -26,6 +26,20 @@ class EquipmentManagerApp:
         self._load_master_data()
         self._create_widgets()
         self._create_menus()
+
+    def _load_db_path(self):
+        """config.json から DB パスを読み込む"""
+        config_file = "config.json"
+        if not os.path.exists(config_file):
+            # 設定ファイルが無い場合のデフォルト値
+            return r"C:\DataBase\equipment_management.db"
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                return config.get("db_path", r"C:\DataBase\equipment_management.db")
+        except Exception as e:
+            print(f"設定ファイル読み込みエラー: {e}")
+            return r"C:\DataBase\equipment_management.db"
 
     def _load_master_data(self):
         self.categorys = self.fetcher.fetch_all("category_master") or [(1, "検査機器"), (2, "一般備品"), (3, "消耗品"), (4, "その他")]
@@ -105,6 +119,12 @@ class EquipmentManagerApp:
         self.tree = self._create_treeview(frame_table)
 
         self.tree.bind("<Double-1>", self.on_tree_item_double_click)
+
+        # --- 右クリックメニュー追加 ---
+        self.menu = tk.Menu(self.root, tearoff=0)
+        self.menu.add_command(label="修理情報編集", command=self.open_repair_info)
+        self.menu.add_command(label="器材情報編集", command=self.open_equipment_edit)
+        self.tree.bind("<Button-3>", self.show_context_menu)
 
     def _create_treeview(self, parent):
         columns = ["機器分類", "機器コード", "機器名", "状態", "部門", "部屋", "製造元", "販売元", "備考", "購入日", "モデル"]
@@ -204,8 +224,7 @@ class EquipmentManagerApp:
         json_headers = json.dumps(headers, ensure_ascii=False)
 
         subprocess.run(["python", "export_to_excel.py", json_data, json_headers, output_folder, file_name])
-
-    def on_tree_item_double_click(self, event):
+    def open_repair_info(self):
         selected = self.tree.selection()
         if selected:
             values = self.tree.item(selected[0], "values")
@@ -213,7 +232,39 @@ class EquipmentManagerApp:
             subprocess.run(["python", "repair_info.py", equipment_id])
             self.root.focus_force()
             self.search()
+    
+    def open_equipment_edit(self):
+        """選択中の器材情報を編集ウィンドウで開く"""
+        try:
+            selected = self.tree.selection()
+            if not selected:
+                messagebox.showwarning("警告", "編集する器材を選択してください。")
+                return
 
+            values = self.tree.item(selected[0], "values")
+            if len(values) < 2:
+                messagebox.showerror("エラー", "器材IDを取得できません。")
+                return
+
+            equipment_id = values[1]
+            # 別ウィンドウで編集スクリプトを起動
+            subprocess.run(["python", "equipment_edit.py", equipment_id])
+            self.root.focus_force()
+            self.search()
+
+        except Exception as e:
+            messagebox.showerror("エラー", f"編集画面を開く際にエラーが発生しました:\n{e}")
+
+    def on_tree_item_double_click(self, event):
+        self.open_equipment_edit()
+
+    def show_context_menu(self, event):
+        # クリック位置のアイテムを選択状態にする
+        item = self.tree.identify_row(event.y)
+        if item:
+            self.tree.selection_set(item)
+            self.menu.post(event.x_root, event.y_root)
+    
 
 def main():
     try:
