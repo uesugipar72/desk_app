@@ -18,7 +18,7 @@ class EquipmentManagerApp:
         self.root = root
         self.root.title("器材管理システム")
         self.root.geometry("1400x750")
-        self.db_name = "equipment_management.db"
+        self.db_name = self._load_db_path()
 
         self.fetcher = MasterDataFetcher(self.db_name)
         self.entries = {}
@@ -26,6 +26,20 @@ class EquipmentManagerApp:
         self._load_master_data()
         self._create_widgets()
         self._create_menus()
+
+    def _load_db_path(self):
+        """config.json から DB パスを読み込む"""
+        config_file = "config.json"
+        if not os.path.exists(config_file):
+            # 設定ファイルが無い場合のデフォルト値
+            return r"C:\DataBase\equipment_management.db"
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                return config.get("db_path", r"C:\DataBase\equipment_management.db")
+        except Exception as e:
+            print(f"設定ファイル読み込みエラー: {e}")
+            return r"C:\DataBase\equipment_management.db"
 
     def _load_master_data(self):
         self.categorys = self.fetcher.fetch_all("category_master") or [(1, "検査機器"), (2, "一般備品"), (3, "消耗品"), (4, "その他")]
