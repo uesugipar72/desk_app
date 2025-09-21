@@ -18,7 +18,12 @@ class EquipmentManagerApp:
         self.root = root
         self.root.title("器材管理システム")
         self.root.geometry("1400x750")
-        self.db_name = "equipment_management.db"
+         # JSON設定ファイルを読み込む
+        config_path = os.path.join(os.path.dirname(__file__), "config.json")
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        self.db_name = config.get("db_name", "equipment_management.db")  # デフォルトあり
 
         self.fetcher = MasterDataFetcher(self.db_name)
         self.entries = {}
