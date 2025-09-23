@@ -1,5 +1,5 @@
 # import subprocess
-# import os
+import os
 import sys
 import json
 from tkinter import ttk
@@ -11,7 +11,13 @@ import sqlite3
 from cls_new_equipment_number import EquipmentManager
 
 # データベース接続設定
-db_name = "equipment_management.db"
+# JSON設定ファイルを読み込む
+config_path = os.path.join(os.path.dirname(__file__), "config.json")
+with open(config_path, "r", encoding="utf-8") as f:
+    config = json.load(f)
+
+db_name = config.get("db_name", "equipment_management.db")  # デフォルトあり
+#db_name = "equipment_management.db"
 fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
 
 # 各マスタテーブルからデータ取得
