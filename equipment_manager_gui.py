@@ -7,7 +7,7 @@ import sqlite3
 import os
 import sys
 from datetime import datetime
-
+from repair_info import RepairInfoWindow
 from equipment_sarch import fetch_data
 from cls_master_data_fetcher import MasterDataFetcher
 from open_master_list import open_master_list_window
@@ -33,8 +33,8 @@ class EquipmentManagerApp:
         self._create_menus()
 
     def _load_master_data(self):
-        self.categorys = self.fetcher.fetch_all("category_master") or [(1, "検査機器"), (2, "一般備品"), (3, "消耗品"), (4, "その他")]
-        self.statuses = self.fetcher.fetch_all("status_master") or [(1, "使用中"), (2, "良好"), (3, "修理中"), (4, "廃棄")]
+        self.categorys = self.fetcher.fetch_all("categorie_master") or [(1, "検査機器"), (2, "一般備品"), (3, "消耗品"), (4, "その他")]
+        self.statuses = self.fetcher.fetch_all("statuse_master") or [(1, "使用中"), (2, "良好"), (3, "修理中"), (4, "廃棄")]
         self.departments = self.fetcher.fetch_all("department_master") or [(1, "検査科"), (2, "検体検査"), (3, "生理検査"), (4, "細菌検査"), (5, "病理検査"), (6, "採血室")]
         self.cellers = self.fetcher.fetch_all("celler_master") or []
         self.manufacturers = self.fetcher.fetch_all("manufacturer_master") or []
@@ -109,7 +109,34 @@ class EquipmentManagerApp:
 
         self.tree = self._create_treeview(frame_table)
 
-        self.tree.bind("<Double-1>", self.on_tree_item_double_click)
+        # ダブルクリック時 → 共通メソッドを呼ぶ
+        self.tree.bind("<Double-1>", self.open_repair_info)
+
+        # ▼右クリックメニューを追加
+        self.tree_menu = tk.Menu(self.root, tearoff=0)
+        self.tree_menu.add_command(label="開く", command=self.open_repair_info)
+
+        self.tree.bind("<Button-3>", self.show_tree_menu)  # 右クリックでメニュー表示
+
+    def show_tree_menu(self, event):
+        """右クリックメニューを表示"""
+        try:
+            item = self.tree.identify_row(event.y)
+            if item:  # 行の上でクリックされた場合
+                self.tree.selection_set(item)  # 選択状態にする
+                self.tree_menu.post(event.x_root, event.y_root)
+        finally:
+            self.tree_menu.grab_release()
+
+    def open_repair_info(self, event=None):
+        selected = self.tree.selection()
+        if not selected:
+            return
+        values = self.tree.item(selected[0], "values")
+        equipment_id = values[1]  # 2列目に器材コード
+
+        RepairInfoWindow(self.root, equipment_id)
+
 
     def _create_treeview(self, parent):
         columns = ["機器分類", "機器コード", "機器名", "状態", "部門", "部屋", "製造元", "販売元", "備考", "購入日", "モデル"]
@@ -210,16 +237,7 @@ class EquipmentManagerApp:
 
         subprocess.run(["python", "export_to_excel.py", json_data, json_headers, output_folder, file_name])
 
-    def on_tree_item_double_click(self, event):
-        selected = self.tree.selection()
-        if selected:
-            values = self.tree.item(selected[0], "values")
-            equipment_id = values[1]
-            subprocess.run(["python", "repair_info.py", equipment_id])
-            self.root.focus_force()
-            self.search()
-
-
+    
 def main():
     try:
         root = tk.Tk()
