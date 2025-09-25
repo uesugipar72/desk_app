@@ -1,5 +1,7 @@
 import sqlite3
 import tkinter as tk
+import os
+import json
 from tkinter import ttk, messagebox
 from contextlib import contextmanager
 from typing import Dict, Any, Iterator
@@ -11,11 +13,22 @@ from cls_edit_repair_window import EditRepairWindow
 
 class RepairInfoWindow(tk.Toplevel):
     """
+<<<<<<< HEAD
     器材情報と修理履歴を管理するウィンドウクラス。
     メインアプリから Toplevel として呼び出して利用します。
     """
 
     DB_NAME = "equipment_management.db"
+=======
+    # --- 定数の一元管理 ---
+    # JSON設定ファイルを読み込む
+    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    DB_NAME = config.get("db_name", "equipment_management.db")  # デフォルトあり
+    #DB_NAME = "equipment_management.db"
+>>>>>>> e10eb0ef768a4f213e45638e60d2d578413869e2
 
     FORM_CONFIG = [
         ("カテゴリ名", "category_name"), ("器材番号", "equipment_id"),

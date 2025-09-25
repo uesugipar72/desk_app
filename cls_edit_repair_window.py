@@ -93,46 +93,28 @@ class EditRepairWindow(tk.Toplevel):
             return None
 
         
-    def _attach_pdf(self):
-        """PDF を選択 → 文書名入力 → repair_document テーブルへ INSERT"""
-        # ファイル選択ダイアログ
-        pdf_path = filedialog.askopenfilename(
-            parent=self, title="PDF を選択",
-            filetypes=[("PDF ファイル", "*.pdf")])
-        if not pdf_path:
-            return  # キャンセル
-
-        # 文書名入力
-        doc_name = simpledialog.askstring("文書名入力", "添付文書名を入力してください：", parent=self)
-        if not doc_name:
-            messagebox.showwarning("入力なし", "文書名が空です。")
+    def _display_attached_pdfs(self):
+        """repair_id に紐づく PDF 一覧を表示する"""
+        if not self.repair_id:
             return
 
-        # 新規追加モードでまだ保存していない場合は警告
-        if self.new_mode:
-            messagebox.showinfo("先に保存を", "修理レコードを先に保存してから PDF を添付してください。")
-            return
-
-        # ファイルの保存先 URL を作成（例：アプリ配下の docs フォルダにコピー）
-        docs_dir = os.path.join(os.getcwd(), "docs")
-        os.makedirs(docs_dir, exist_ok=True)
-        dest_path = os.path.join(docs_dir, os.path.basename(pdf_path))
         try:
-            # 同名なら上書きコピー
-            import shutil
-            shutil.copy2(pdf_path, dest_path)
-
             with sqlite3.connect(self.db_name) as conn:
                 cur = conn.cursor()
                 cur.execute("""
-                    INSERT INTO repair_document (name, doc_repair_id, doc_url)
-                    VALUES (?, ?, ?)
-                """, (doc_name, self.repair_id, dest_path))
-                conn.commit()
+                SELECT name, doc_url FROM repair_document
+                WHERE doc_repair_id = ?
+                """, (self.repair_id,))
+                pdfs = cur.fetchall()
 
-            messagebox.showinfo("完了", "PDF を添付しました。")
+            for i, (name, url) in enumerate(pdfs):
+                label = tk.Label(self.pdf_frame, text=name, fg="blue", cursor="hand2", anchor="w", wraplength=150)
+                label.grid(row=i, column=0, sticky="w")
+                label.bind("<Button-1>", lambda e, path=url: self._open_pdf(path))
+
         except Exception as e:
-            messagebox.showerror("DBエラー", f"PDF 添付中にエラーが発生：\n{e}")
+            messagebox.showerror("PDF表示エラー", f"PDF一覧の取得中にエラーが発生:\n{e}")
+
             
     def create_widgets(self):
         labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "備考"]
