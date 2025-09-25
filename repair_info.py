@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from contextlib import contextmanager
 from typing import Dict, Any, Iterator
+import os
+import json
 
 # 外部モジュール
 from cls_master_data_fetcher import MasterDataFetcher
@@ -15,7 +17,11 @@ class RepairInfoWindow(tk.Toplevel):
     メインアプリから Toplevel として呼び出して利用します。
     """
 
-    DB_NAME = "equipment_management.db"
+    # JSON ファイルからデータベース名を取得
+    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+    DB_NAME = config.get("db_name", "default.db")  # デフォルト値を設定
 
     FORM_CONFIG = [
         ("カテゴリ名", "category_name"), ("器材番号", "equipment_id"),
@@ -37,7 +43,7 @@ class RepairInfoWindow(tk.Toplevel):
         "repair_type_master": [
             (1, "随意対応"), (2, "保守対応"), (3, "対応未定"), (4, "修理不能"), (5, "使用不能")
         ],
-        "repair_status_master": [
+        "repair_statuse_master": [
             (1, "修理依頼中"), (2, "修理不能"), (3, "修理完了"), (4, "更新申請中"), (5, "廃棄")
         ]
     }
@@ -75,9 +81,9 @@ class RepairInfoWindow(tk.Toplevel):
 
     def _load_all_master_data_as_lookup(self) -> Dict[str, Dict[int, str]]:
         tables = [
-            "category_master", "status_master", "department_master", "room_master",
+            "categorie_master", "statuse_master", "department_master", "room_master",
             "manufacturer_master", "celler_master",
-            "repair_category_master", "repair_status_master", "repair_type_master"
+            "repair_categorie_master", "repair_statuse_master", "repair_type_master"
         ]
         lookups = {}
         for table in tables:
@@ -140,8 +146,8 @@ class RepairInfoWindow(tk.Toplevel):
 
         self.equipment_data = {
             "id": data[0], "equipment_id": data[1], "name": data[2],
-            "category_name": self.master_lookups["category_master"].get(data[4], "不明"),
-            "status_name": self.master_lookups["status_master"].get(data[5], "不明"),
+            "category_name": self.master_lookups["categorie_master"].get(data[4], "不明"),
+            "status_name": self.master_lookups["statuse_master"].get(data[5], "不明"),
             "department_name": self.master_lookups["department_master"].get(data[6], "不明"),
             "room_name": self.master_lookups["room_master"].get(data[7], "不明"),
             "manufacturer_name": self.master_lookups["manufacturer_master"].get(data[8], "不明"),
@@ -164,7 +170,7 @@ class RepairInfoWindow(tk.Toplevel):
             SELECT r.id, rs.name, r.request_date, r.completion_date,
                    rc.name, c.name, r.technician
             FROM repair r
-            LEFT JOIN repair_status_master rs ON r.repairstatuses = rs.id
+            LEFT JOIN repair_statuse_master rs ON r.repairstatuses = rs.id
             LEFT JOIN repair_type_master rc ON r.repairtype = rc.id
             LEFT JOIN celler_master c ON r.vendor = c.id
             WHERE r.equipment_id = ? ORDER BY r.request_date DESC;
