@@ -6,6 +6,8 @@ from tkinter import filedialog, simpledialog
 from tkcalendar import DateEntry
 import sqlite3
 from nullable_date_entry import NullableDateEntry
+import shutil
+from tkinter import filedialog
 
 class EditRepairWindow(tk.Toplevel):
     def __init__(self, parent, db_name, equipment_id=None, repair_id=None, refresh_callback=None):
@@ -39,11 +41,11 @@ class EditRepairWindow(tk.Toplevel):
     def _fetch_masters(self):
         with sqlite3.connect(self.db_name) as conn:
             cur = conn.cursor()
-            cur.execute("SELECT id, name FROM repair_category_master")
+            cur.execute("SELECT id, name FROM repair_categorie_master")
             rows = cur.fetchall()
             self.categories = dict(rows) if rows else {}
 
-            cur.execute("SELECT id, name FROM repair_status_master")
+            cur.execute("SELECT id, name FROM repair_statuse_master")
             rows = cur.fetchall()
             self.statuses = dict(rows) if rows else {}
 
@@ -77,10 +79,10 @@ class EditRepairWindow(tk.Toplevel):
                 self.equipment_id = data["equipment_id"]  # ← ここを修正
 
                 # 各種マスタ再取得
-                cursor.execute("SELECT id, name FROM repair_category_master")
+                cursor.execute("SELECT id, name FROM repair_categorie_master")
                 self.categories = dict(cursor.fetchall())
 
-                cursor.execute("SELECT id, name FROM repair_status_master")
+                cursor.execute("SELECT id, name FROM repair_statuse_master")
                 self.statuses = dict(cursor.fetchall())
 
                 cursor.execute("SELECT id, name FROM celler_master")
@@ -225,6 +227,67 @@ class EditRepairWindow(tk.Toplevel):
         except Exception as e:
             messagebox.showerror("PDF表示エラー", f"PDF一覧の取得中にエラーが発生:\n{e}")
     
+    def _attach_pdf(self):
+        """PDF を添付して DB に登録する"""
+        if not self.repair_id:
+            messagebox.showwarning("警告", "修理情報を保存してから PDF を添付してください。")
+            return
+
+        file_path = filedialog.askopenfilename(
+            title="PDFファイルを選択",
+            filetypes=[("PDF files", "*.pdf")]
+        )
+        if not file_path:
+            return  # キャンセルされた場合
+
+        try:
+            # --- ユーザーに新しい名前を入力させる ---
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            new_name = simpledialog.askstring(
+                "ファイル名入力",
+                f"保存するファイル名を入力してください（拡張子不要）\n元: {base_name}",
+                initialvalue=base_name
+            )
+
+            if not new_name:  # キャンセル or 空欄
+                new_name = base_name
+
+            # 保存先フォルダ（アプリ直下）
+            save_dir = os.path.join(os.getcwd(), "pdf_docs")
+            os.makedirs(save_dir, exist_ok=True)
+
+            # repair_id + 入力名で保存
+            filename = f"{self.repair_id}_{new_name}.pdf"
+            dest_path = os.path.join(save_dir, filename)
+
+            # PDF をコピー
+            shutil.copy(file_path, dest_path)
+
+            # DB に登録
+            with sqlite3.connect(self.db_name) as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO repair_document (doc_repair_id, name, doc_url)
+                    VALUES (?, ?, ?)
+                """, (self.repair_id, filename, dest_path))
+                conn.commit()
+
+            messagebox.showinfo("完了", f"PDFを添付しました。\n保存名: {filename}")
+            self._refresh_pdf_list()
+
+            # 添付後にウィンドウを前面に戻す
+            self.lift()
+            self.focus_force()
+
+        except Exception as e:
+            messagebox.showerror("エラー", f"PDF添付中にエラーが発生しました:\n{e}")
+
+    def _refresh_pdf_list(self):
+        """PDF一覧を再表示（添付後用）"""
+        for widget in self.pdf_frame.winfo_children():
+            widget.destroy()
+        self._display_attached_pdfs()
+
     def _open_pdf(self, path):
         """クリックでPDFを開く"""
         if not os.path.exists(path):

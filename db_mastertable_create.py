@@ -8,7 +8,7 @@ conn = sqlite3.connect(db_name)
 cursor = conn.cursor()
 
 # テーブルを作成
-tables_name = ["categorie_master","status_master","department_master"]
+tables_name = ["categorie_master","statuse_master","department_master"]
 for create_table_name in tables_name:
     print(create_table_name)
     query = f"CREATE TABLE {create_table_name} (ID INT NOT NULL PRIMARY KEY,NAME VARCHAR(255) NOT NULL);"

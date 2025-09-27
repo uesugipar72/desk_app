@@ -40,7 +40,7 @@ class RepairInfoWindow:
     # マスタデータが空だった場合のデフォルト値
     DEFAULT_MASTER_DATA = {
         "repair_type_master": [(1, "随意対応"), (2, "保守対応"), (3, "対応未定"), (4, "修理不能"), (5, "使用不能")],
-        "repair_status_master": [(1, "修理依頼中"), (2, "修理不能"), (3, "修理完了"), (4, "更新申請中"), (5, "廃棄")]
+        "repair_statuse_master": [(1, "修理依頼中"), (2, "修理不能"), (3, "修理完了"), (4, "更新申請中"), (5, "廃棄")]
     }
 
     def __init__(self, equipment_id: str):
@@ -80,8 +80,8 @@ class RepairInfoWindow:
         これにより、名称検索時のDBアクセスが不要になり、パフォーマンスが向上します。
         """
         master_tables = [
-            "category_master", "status_master", "department_master", "room_master",
-            "manufacturer_master", "celler_master", "repair_category_master", "repair_status_master", "repair_type_master"
+            "categorie_master", "statuse_master", "department_master", "room_master",
+            "manufacturer_master", "celler_master", "repair_categorie_master", "repair_statuse_master", "repair_type_master"
         ]
         lookups = {}
         for table in master_tables:
@@ -146,8 +146,8 @@ class RepairInfoWindow:
 
         self.equipment_data = {
             "id": data[0], "equipment_id": data[1], "name": data[2],
-            "category_name": self.master_lookups["category_master"].get(data[4], "不明"),
-            "status_name": self.master_lookups["status_master"].get(data[5], "不明"),
+            "category_name": self.master_lookups["categorie_master"].get(data[4], "不明"),
+            "status_name": self.master_lookups["statuse_master"].get(data[5], "不明"),
             "department_name": self.master_lookups["department_master"].get(data[6], "不明"),
             "room_name": self.master_lookups["room_master"].get(data[7], "不明"),
             "manufacturer_name": self.master_lookups["manufacturer_master"].get(data[8], "不明"),
@@ -172,7 +172,7 @@ class RepairInfoWindow:
             SELECT r.id, rs.name, r.request_date, r.completion_date,
                    rc.name, c.name, r.technician
             FROM repair r
-            LEFT JOIN repair_status_master rs ON r.repairstatuses = rs.id
+            LEFT JOIN repair_statuse_master rs ON r.repairstatuses = rs.id
             LEFT JOIN repair_type_master rc ON r.repairtype = rc.id
             LEFT JOIN celler_master c ON r.vendor = c.id
             WHERE r.equipment_id = ? ORDER BY r.request_date DESC;

@@ -17,8 +17,8 @@ db_name = "equipment_management.db"
 fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
 
 # 各マスタテーブルからデータ取得
-categorys = fetcher.fetch_all("category_master")
-statuses = fetcher.fetch_all("status_master")
+categorys = fetcher.fetch_all("categorie_master")
+statuses = fetcher.fetch_all("statuse_master")
 departments = fetcher.fetch_all("department_master")
 cellers = fetcher.fetch_all("celler_master")
 manufacturers = fetcher.fetch_all("manufacturer_master")
