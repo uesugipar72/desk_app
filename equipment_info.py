@@ -1,20 +1,23 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import tkinter.font as tkFont 
 import os
 import sys  
-from equipment_sarch import fetch_data
-from cls_master_data_fetcher import MasterDataFetcher
 import subprocess
 import json
-from open_master_list import open_master_list_window
-from tkinter import messagebox
 import sqlite3
-import json
 from datetime import datetime
 
-db_name = "equipment_management.db"
-fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
+from equipment_sarch import fetch_data
+from cls_master_data_fetcher import MasterDataFetcher
+from open_master_list import open_master_list_window
+
+# JSON ファイルからデータベース名を取得
+config_path = os.path.join(os.path.dirname(__file__), "config.json")
+with open(config_path, "r", encoding="utf-8") as f:
+    config = json.load(f)
+DB_NAME = config.get("db_name", "default.db")  # デフォルト値を設定
+fetcher = MasterDataFetcher(DB_NAME)  # MasterDataFetcherをインスタンス化
 
 # 各マスタテーブルからデータ取得
 categorys = fetcher.fetch_all("categorie_master")
@@ -34,7 +37,7 @@ if not rooms:
     rooms = [(1, "受付_染色室"), (2, "鏡検室"), (3, "臓器固定・切出室"), (4, "標本作製室"),(5, "病理標本保人室"),(6, "病理診断室"),(8, "剖検室"),(9, "剖検前室")]
 
 def populate_master_menu():
-    conn = sqlite3.connect(db_name)
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = [table[0] for table in cursor.fetchall()]

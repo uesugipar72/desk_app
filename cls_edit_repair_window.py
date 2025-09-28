@@ -94,30 +94,6 @@ class EditRepairWindow(tk.Toplevel):
             messagebox.showerror("DBエラー", f"修理情報取得中にエラーが発生しました:\n{e}")
             return None
 
-        
-    def _display_attached_pdfs(self):
-        """repair_id に紐づく PDF 一覧を表示する"""
-        if not self.repair_id:
-            return
-
-        try:
-            with sqlite3.connect(self.db_name) as conn:
-                cur = conn.cursor()
-                cur.execute("""
-                SELECT name, doc_url FROM repair_document
-                WHERE doc_repair_id = ?
-                """, (self.repair_id,))
-                pdfs = cur.fetchall()
-
-            for i, (name, url) in enumerate(pdfs):
-                label = tk.Label(self.pdf_frame, text=name, fg="blue", cursor="hand2", anchor="w", wraplength=150)
-                label.grid(row=i, column=0, sticky="w")
-                label.bind("<Button-1>", lambda e, path=url: self._open_pdf(path))
-
-        except Exception as e:
-            messagebox.showerror("PDF表示エラー", f"PDF一覧の取得中にエラーが発生:\n{e}")
-
-            
     def create_widgets(self):
         labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "備考"]
         self.entries = {}
@@ -204,8 +180,8 @@ class EditRepairWindow(tk.Toplevel):
 
     
     def _display_attached_pdfs(self):
-        """equipment_id に紐づく PDF 一覧を表示する"""
-        if not self.equipment_id:
+        """repair_id に紐づく PDF 一覧を表示する"""
+        if not self.repair_id:
             return
 
         try:
@@ -213,12 +189,10 @@ class EditRepairWindow(tk.Toplevel):
                 cur = conn.cursor()
                 cur.execute("""
                     SELECT name, doc_url FROM repair_document
-                    WHERE doc_repair_id IN (
-                        SELECT id FROM repair WHERE equipment_id = ?
-                    )
-                """, (self.equipment_id,))
+                    WHERE doc_repair_id = ?
+                """, (self.repair_id,))
                 pdfs = cur.fetchall()
-
+                
             for i, (name, url) in enumerate(pdfs):
                 label = tk.Label(self.pdf_frame, text=name, fg="blue", cursor="hand2", anchor="w", wraplength=150)
                 label.grid(row=i, column=0, sticky="w")
