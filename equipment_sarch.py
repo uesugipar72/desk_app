@@ -1,12 +1,19 @@
 import sqlite3
 import tkinter as tk
 from tkinter import ttk
+import os,json
 
 def fetch_data(equipment_id=None, name=None, name_kana=None, categorie_id=None, statuse_id=None, department_id=None ,room_id=None, manufacturer_id=None, celler_id=None, remarks=None):
     """
     検索条件に基づいてデータを抽出
     """
-    with sqlite3.connect("equipment_management.db") as conn:
+    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    DB_NAME = config.get("db_name", "default.db")
+
+    with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         
         # 検索条件のリストとパラメータリストを準備

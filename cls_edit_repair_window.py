@@ -17,7 +17,7 @@ class EditRepairWindow(tk.Toplevel):
         self.repair_id = repair_id
         self.refresh_callback = refresh_callback
         self.new_mode = (repair_id in (None, "", 0))   # ← ★ 新規判定s
-        self.geometry("600x600")
+        self.geometry("900x600")
         self.resizable(False, False)
         self.entries = {}
         self.equipment_id = equipment_id  # 修理情報に紐づく器材ID
@@ -120,7 +120,7 @@ class EditRepairWindow(tk.Toplevel):
 
         # --- PDF 一覧のラベルフレームを右側に表示 ---
         self.pdf_frame = tk.LabelFrame(self, text="添付PDF一覧", padx=10, pady=10)
-        self.pdf_frame.place(x=400, y=20, width=180, height=350)  # 右に配置
+        self.pdf_frame.place(x=400, y=20, width=400, height=350)  # 右に配置
 
         if not self.new_mode:
             self._display_attached_pdfs()
@@ -130,7 +130,7 @@ class EditRepairWindow(tk.Toplevel):
 
             tk.Button(btn_frame, text="PDF添付", command=self._attach_pdf).pack(side=tk.LEFT, padx=5)
             tk.Button(btn_frame, text="保存", command=self.save_changes).pack(side=tk.LEFT, padx=5)
-            tk.Button(btn_frame, text="キャンセル", command=self.destroy).pack(side=tk.LEFT, padx=5)
+            tk.Button(btn_frame, text="戻る", command=self.destroy).pack(side=tk.LEFT, padx=5)
 
 
 
@@ -194,7 +194,7 @@ class EditRepairWindow(tk.Toplevel):
                 pdfs = cur.fetchall()
                 
             for i, (name, url) in enumerate(pdfs):
-                label = tk.Label(self.pdf_frame, text=name, fg="blue", cursor="hand2", anchor="w", wraplength=150)
+                label = tk.Label(self.pdf_frame, text=name, fg="blue", cursor="hand2", anchor="w", wraplength=400)
                 label.grid(row=i, column=0, sticky="w")
                 label.bind("<Button-1>", lambda e, path=url: self._open_pdf(path))
 

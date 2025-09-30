@@ -16,9 +16,9 @@ config_path = os.path.join(os.path.dirname(__file__), "config.json")
 with open(config_path, "r", encoding="utf-8") as f:
     config = json.load(f)
 
-db_name = config.get("db_name", "equipment_management.db")  # デフォルトあり
+DB_NAME = config.get("db_name", "equipment_management.db")  # デフォルトあり
 #db_name = "equipment_management.db"
-fetcher = MasterDataFetcher(db_name)  # MasterDataFetcherをインスタンス化
+fetcher = MasterDataFetcher(DB_NAME)  # MasterDataFetcherをインスタンス化
 
 # 各マスタテーブルからデータ取得
 categories = fetcher.fetch_all("categorie_master")
@@ -167,7 +167,7 @@ for i, (label, key) in enumerate(zip(labels, keys)):
 save_button = tk.Button(form_frame, text="保存", command=save_equipment)
 save_button.grid(row=len(labels), column=0, pady=20)
 
-cancel_button = tk.Button(form_frame, text="キャンセル", command=cancel_edit)
+cancel_button = tk.Button(form_frame, text="戻る", command=cancel_edit)
 cancel_button.grid(row=len(labels), column=1, pady=20)
 
 if equipment_data.get("equipment_id"):
