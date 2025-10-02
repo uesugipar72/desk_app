@@ -8,7 +8,7 @@ import json
 
 # 外部モジュール
 from cls_master_data_fetcher import MasterDataFetcher
-from cls_edit_repair_window import EditRepairWindow
+from edit_repair_window import EditRepairWindow
 
 
 class RepairInfoWindow(tk.Toplevel):
@@ -31,12 +31,14 @@ class RepairInfoWindow(tk.Toplevel):
     ]
 
     REPAIR_HISTORY_COLUMNS = {
-        "status": {"text": "状態", "width": 100},
-        "request_date": {"text": "依頼日", "width": 120},
-        "completion_date": {"text": "完了日", "width": 120},
-        "repair_type": {"text": "修理種別", "width": 100},
-        "vendor": {"text": "業者", "width": 120},
-        "technician": {"text": "技術者", "width": 100}
+        "status": {"text": "状態", "width": 80},
+        "request_date": {"text": "依頼日", "width": 90},
+        "completion_date": {"text": "完了日", "width": 90},
+        "repair_type": {"text": "修理種別", "width": 90},
+        "vendor": {"text": "業者", "width": 130},
+        "technician": {"text": "技術者", "width": 100},
+        "details": {"text": "詳細", "width": 300},  # 20251002 追加
+        "remarks": {"text": "備考", "width": 200},  # 備考は一旦非表示
     }
 
     DEFAULT_MASTER_DATA = {
@@ -56,7 +58,7 @@ class RepairInfoWindow(tk.Toplevel):
         """
         super().__init__(parent)
         self.title("器材情報（参照）")
-        self.geometry("900x500")
+        self.geometry("1500x500")
         self.transient(parent)     # 親ウィンドウの手前に表示
         self.grab_set()            # モーダル表示
 
@@ -126,7 +128,19 @@ class RepairInfoWindow(tk.Toplevel):
         for col_id in columns_ids:
             config = self.REPAIR_HISTORY_COLUMNS[col_id]
             self.repair_tree.heading(col_id, text=config["text"])
-            self.repair_tree.column(col_id, width=config["width"], anchor="center")
+            self.repair_tree.column(col_id, width=config["width"], anchor="w", stretch=False)
+            # デフォルトは左寄せ
+            anchor = "center"
+            # 完了日だけ中央寄せ
+            if col_id == ("details","remarks"):
+                anchor = "w"
+
+            self.repair_tree.column(
+                col_id,
+                width=config["width"],
+                anchor=anchor,
+                stretch=False
+            )
 
         scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=self.repair_tree.yview)
         self.repair_tree.configure(yscrollcommand=scrollbar.set)
@@ -168,7 +182,7 @@ class RepairInfoWindow(tk.Toplevel):
 
         query = """
             SELECT r.id, rs.name, r.request_date, r.completion_date,
-                   rc.name, c.name, r.technician
+                   rc.name, c.name, r.technician, r.details
             FROM repair r
             LEFT JOIN repair_statuse_master rs ON r.repairstatuses = rs.id
             LEFT JOIN repair_type_master rc ON r.repairtype = rc.id
@@ -180,7 +194,7 @@ class RepairInfoWindow(tk.Toplevel):
             repairs = cursor.fetchall()
 
         for row in repairs:
-            self.repair_tree.insert("", tk.END, iid=row[0], values=row[1:])
+            self.repair_tree.insert("", tk.END, iid=str(row[0]), values=row[1:])
 
     def _open_add_repair(self):
         try:
@@ -200,7 +214,7 @@ class RepairInfoWindow(tk.Toplevel):
             messagebox.showwarning("選択なし", "修正する修理情報を選択してください。")
             return
 
-        repair_id = selected_ids[0]
+        repair_id = int(selected_ids[0])
         try:
             EditRepairWindow(
                 parent=self,

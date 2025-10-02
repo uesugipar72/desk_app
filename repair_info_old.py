@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Tuple, Iterator
 
 # 外部モジュールのインポート
 from cls_master_data_fetcher import MasterDataFetcher
-from cls_edit_repair_window import EditRepairWindow
+from edit_repair_window import EditRepairWindow
 
 class RepairInfoWindow:
     """

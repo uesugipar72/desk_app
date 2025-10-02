@@ -65,7 +65,7 @@ class EditRepairWindow(tk.Toplevel):
                 # 修理情報を取得
                 cursor.execute("""
                     SELECT id, equipment_id, repairstatuses, repaircategories,
-                        vendor, technician, request_date, completion_date, remarks
+                        vendor, technician, request_date, completion_date, details, remarks
                     FROM repair
                     WHERE id = ?
                 """, (self.repair_id,))
@@ -95,7 +95,7 @@ class EditRepairWindow(tk.Toplevel):
             return None
 
     def create_widgets(self):
-        labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "備考"]
+        labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "詳細", "備考"]
         self.entries = {}
 
         for i, label in enumerate(labels):
@@ -135,7 +135,7 @@ class EditRepairWindow(tk.Toplevel):
 
 
     def populate_fields(self):
-        labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "備考"]
+        labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "詳細", "備考"]
         if not self.selected_data:
             messagebox.showerror("エラー", "修理情報が取得できませんでした。")
             return
@@ -152,6 +152,7 @@ class EditRepairWindow(tk.Toplevel):
             self.get_name_from_id(category_id, self.categories),     # カテゴリ
             self.get_name_from_id(vendor_id, self.vendors),          # 業者
             self.selected_data["technician"],                        # 技術者
+            self.selected_data["details"],                            # 詳細
             self.selected_data["remarks"]                            # 備考
         ]
 
