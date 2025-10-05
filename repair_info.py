@@ -181,20 +181,30 @@ class RepairInfoWindow(tk.Toplevel):
             self.repair_tree.delete(item)
 
         query = """
-            SELECT r.id, rs.name, r.request_date, r.completion_date,
-                   rc.name, c.name, r.technician, r.details
+            SELECT r.id,
+                rs.name AS status, 
+                r.request_date,
+                r.completion_date,
+                rt.name AS repair_type,
+                c.name AS vendor,
+                r.technician,
+                r.details,
+                r.remarks
             FROM repair r
             LEFT JOIN repair_statuse_master rs ON r.repairstatuses = rs.id
-            LEFT JOIN repair_type_master rc ON r.repairtype = rc.id
+            LEFT JOIN repair_type_master rt ON r.repairtype = rt.id
             LEFT JOIN celler_master c ON r.vendor = c.id
-            WHERE r.equipment_id = ? ORDER BY r.request_date DESC;
+            WHERE r.equipment_id = ?
+            ORDER BY r.request_date DESC;
         """
         with self._get_db_cursor() as cursor:
             cursor.execute(query, (self.equipment_data["equipment_id"],))
             repairs = cursor.fetchall()
 
         for row in repairs:
+            # row[0] = id, 以降を TreeView に渡す
             self.repair_tree.insert("", tk.END, iid=str(row[0]), values=row[1:])
+
 
     def _open_add_repair(self):
         try:

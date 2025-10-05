@@ -54,7 +54,7 @@ def get_id_from_name(name, data_list):
     return None  # 該当なしの場合はNone
 
 def display_repair_history(equipment_id):
-    conn = sqlite3.connect(db_name)
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT status, request_date, completion_date, category, vendor, technician
@@ -86,7 +86,7 @@ def save_equipment():
     
     if updated_data:
         try:
-            conn = sqlite3.connect(db_name)
+            conn = sqlite3.connect(DB_NAME)
             cursor = conn.cursor()
 
             # 各名称に対応するIDを取得
