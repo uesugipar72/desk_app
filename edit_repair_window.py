@@ -10,6 +10,10 @@ import shutil
 from tkinter import filedialog
 
 class EditRepairWindow(tk.Toplevel):
+
+    FIELD_LABELS = ["状態", "依頼日", "完了日", "対応", "業者", "技術者", "詳細", "備考"]
+    REPAIR_FIELDS = ["id", "equipment_id", "repairstatuses", "repairtype", "request_date", "completion_date", "details", "vendor", "technician", "remarks"]
+    # --- __init__ ----------
     def __init__(self, parent, db_name, equipment_id=None, repair_id=None, refresh_callback=None):
         super().__init__(parent)
         self.title("修理情報修正")
@@ -20,9 +24,11 @@ class EditRepairWindow(tk.Toplevel):
         self.geometry("900x600")
         self.resizable(False, False)
         self.entries = {}
-        self.equipment_id = equipment_id  # 修理情報に紐づく器材ID
         # マスタデータは常に取得
         self._fetch_masters()
+
+        self.create_widgets()
+        
         # データベースから修理情報・マスタデータを取得
         # 既存データ取得
         self.selected_data = None
@@ -41,13 +47,13 @@ class EditRepairWindow(tk.Toplevel):
     def _fetch_masters(self):
         with sqlite3.connect(self.db_name) as conn:
             cur = conn.cursor()
-            cur.execute("SELECT id, name FROM repair_categorie_master")
+            cur.execute("SELECT id, name FROM repair_type_master")
             rows = cur.fetchall()
-            self.categories = dict(rows) if rows else {}
+            self.types = dict(rows) if rows else {}
 
             cur.execute("SELECT id, name FROM repair_statuse_master")
             rows = cur.fetchall()
-            self.statuses = dict(rows) if rows else {}
+            self.repairstatuses = dict(rows) if rows else {}
 
             cur.execute("SELECT id, name FROM celler_master")
             rows = cur.fetchall()
@@ -64,8 +70,8 @@ class EditRepairWindow(tk.Toplevel):
 
                 # 修理情報を取得
                 cursor.execute("""
-                    SELECT id, equipment_id, repairstatuses, repaircategories,
-                        vendor, technician, request_date, completion_date, details, remarks
+                    SELECT id, equipment_id, repairstatuses, repairtype, request_date,completion_date,
+                               details, vendor, technician, remarks
                     FROM repair
                     WHERE id = ?
                 """, (self.repair_id,))
@@ -76,14 +82,14 @@ class EditRepairWindow(tk.Toplevel):
                     return None
 
                 # 修理に紐づく器材IDを保存
-                self.equipment_id = data["equipment_id"]  # ← ここを修正
+                self.equipment_id = data["equipment_id"] 
 
                 # 各種マスタ再取得
-                cursor.execute("SELECT id, name FROM repair_categorie_master")
-                self.categories = dict(cursor.fetchall())
+                cursor.execute("SELECT id, name FROM repair_type_master")
+                self.types = dict(cursor.fetchall())
 
                 cursor.execute("SELECT id, name FROM repair_statuse_master")
-                self.statuses = dict(cursor.fetchall())
+                self.repairstatuses = dict(cursor.fetchall())
 
                 cursor.execute("SELECT id, name FROM celler_master")
                 self.vendors = dict(cursor.fetchall())
@@ -95,18 +101,17 @@ class EditRepairWindow(tk.Toplevel):
             return None
 
     def create_widgets(self):
-        labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "詳細", "備考"]
         self.entries = {}
 
-        for i, label in enumerate(labels):
+        for i, label in enumerate(self.FIELD_LABELS):
             tk.Label(self, text=label).grid(row=i, column=0, padx=5, pady=5)
 
             if "日" in label:
                 entry = NullableDateEntry(self, date_pattern="yyyy-mm-dd")
-            elif label == "カテゴリ":
-                entry = ttk.Combobox(self, values=list(self.categories.values()), state="readonly")
+            elif label == "対応":
+                entry = ttk.Combobox(self, values=list(self.types.values()), state="readonly")
             elif label == "状態":
-                entry = ttk.Combobox(self, values=list(self.statuses.values()), state="readonly")
+                entry = ttk.Combobox(self, values=list(self.repairstatuses.values()), state="readonly")
             elif label == "業者":
                 entry = ttk.Combobox(self, values=list(self.vendors.values()), state="readonly")
             elif label == "備考":
@@ -124,9 +129,8 @@ class EditRepairWindow(tk.Toplevel):
 
         if not self.new_mode:
             self._display_attached_pdfs()
-
             btn_frame = tk.Frame(self)
-            btn_frame.grid(row=len(labels), column=0, columnspan=2, pady=10)
+            btn_frame.grid(row=len(self.FIELD_LABELS), column=0, columnspan=2, pady=10)
 
             tk.Button(btn_frame, text="PDF添付", command=self._attach_pdf).pack(side=tk.LEFT, padx=5)
             tk.Button(btn_frame, text="保存", command=self.save_changes).pack(side=tk.LEFT, padx=5)
@@ -135,7 +139,7 @@ class EditRepairWindow(tk.Toplevel):
 
 
     def populate_fields(self):
-        labels = ["状態", "依頼日", "完了日", "カテゴリ", "業者", "技術者", "詳細", "備考"]
+        
         if not self.selected_data:
             messagebox.showerror("エラー", "修理情報が取得できませんでした。")
             return
@@ -149,14 +153,14 @@ class EditRepairWindow(tk.Toplevel):
             self.get_name_from_id(repairstatus_id, self.statuses),   # 状態
             self.selected_data["request_date"],                      # 依頼日
             self.selected_data["completion_date"],                   # 完了日
-            self.get_name_from_id(category_id, self.categories),     # カテゴリ
+            self.get_name_from_id(category_id, self.types),          # 対応
             self.get_name_from_id(vendor_id, self.vendors),          # 業者
             self.selected_data["technician"],                        # 技術者
-            self.selected_data["details"],                            # 詳細
-            self.selected_data["remarks"]                            # 備考
+            self.selected_data["details"],                           # 詳細
+            self.selected_data["remarks"],                           # 備考
         ]
 
-        for key, value in zip(labels, values):
+        for key, value in zip(self.FIELD_LABELS, values):
             widget = self.entries.get(key)
             if widget:
                 if isinstance(widget, DateEntry):
@@ -283,7 +287,7 @@ class EditRepairWindow(tk.Toplevel):
         new_values = {k: e.get() for k, e in self.entries.items()}
 
         repairstatus_id = self.get_id_from_name(new_values["状態"], self.statuses)
-        category_id     = self.get_id_from_name(new_values["カテゴリ"], self.categories)
+        category_id     = self.get_id_from_name(new_values["カテゴリ"], self.types)
         vendor_id       = self.get_id_from_name(new_values["業者"], self.vendors)
 
         if None in (repairstatus_id, category_id, vendor_id):

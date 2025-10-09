@@ -6,5 +6,7 @@ __pycache__/
 # Excelファイルを無視
 *.xlsx
 *.xls
+# pdfファイルを無視
+*.pdf
 
 

@@ -24,7 +24,7 @@ class RepairInfoWindow(tk.Toplevel):
     DB_NAME = config.get("db_name", "default.db")  # デフォルト値を設定
 
     FORM_CONFIG = [
-        ("カテゴリ名", "category_name"), ("器材番号", "equipment_id"),
+        ("カテゴリ名", "categorie_name"), ("器材番号", "equipment_id"),
         ("器材名", "name"), ("状態", "status_name"), ("部門", "department_name"),
         ("部屋", "room_name"), ("製造元", "manufacturer_name"), ("販売元", "celler_name"),
         ("備考", "remarks"), ("購入日", "purchase_date"), ("モデル(シリアル)", "model")
@@ -85,7 +85,7 @@ class RepairInfoWindow(tk.Toplevel):
         tables = [
             "categorie_master", "statuse_master", "department_master", "room_master",
             "manufacturer_master", "celler_master",
-            "repair_categorie_master", "repair_statuse_master", "repair_type_master"
+            "repair_type_master", "repair_statuse_master",
         ]
         lookups = {}
         for table in tables:
@@ -160,7 +160,7 @@ class RepairInfoWindow(tk.Toplevel):
 
         self.equipment_data = {
             "id": data[0], "equipment_id": data[1], "name": data[2],
-            "category_name": self.master_lookups["categorie_master"].get(data[4], "不明"),
+            "categorie_name": self.master_lookups["categorie_master"].get(data[4], "不明"),
             "status_name": self.master_lookups["statuse_master"].get(data[5], "不明"),
             "department_name": self.master_lookups["department_master"].get(data[6], "不明"),
             "room_name": self.master_lookups["room_master"].get(data[7], "不明"),
