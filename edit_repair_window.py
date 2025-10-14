@@ -146,14 +146,14 @@ class EditRepairWindow(tk.Toplevel):
         
         # ID（int）で取得（カンマ不要）
         repairstatus_id = self.selected_data["repairstatuses"]
-        category_id = self.selected_data["repairtype"]
+        type_id = self.selected_data["repairtype"]
         vendor_id = self.selected_data["vendor"]
 
         values = [
             self.get_name_from_id(repairstatus_id, self.repairstatuses),   # 状態
             self.selected_data["request_date"],                      # 依頼日
             self.selected_data["completion_date"],                   # 完了日
-            self.get_name_from_id(category_id, self.types),          # 対応
+            self.get_name_from_id(type_id, self.types),          # 対応
             self.get_name_from_id(vendor_id, self.vendors),          # 業者
             self.selected_data["technician"],                        # 技術者
             self.selected_data["details"],                           # 詳細
@@ -287,10 +287,10 @@ class EditRepairWindow(tk.Toplevel):
         new_values = {k: e.get() for k, e in self.entries.items()}
 
         repairstatus_id = self.get_id_from_name(new_values["状態"], self.repairstatuses)
-        category_id     = self.get_id_from_name(new_values["カテゴリ"], self.types)
+        type_id     = self.get_id_from_name(new_values["対応"], self.types)
         vendor_id       = self.get_id_from_name(new_values["業者"], self.vendors)
 
-        if None in (repairstatus_id, category_id, vendor_id):
+        if None in (repairstatus_id,type_id, vendor_id):
             messagebox.showerror("エラー", "マスタの選択値が不正です。")
             return
 
@@ -314,7 +314,7 @@ class EditRepairWindow(tk.Toplevel):
                         repairstatus_id,
                         new_values["依頼日"],
                         new_values["完了日"],
-                        category_id,
+                        type_id,
                         vendor_id,
                         new_values["技術者"],
                         new_values.get("備考", "")
@@ -330,7 +330,7 @@ class EditRepairWindow(tk.Toplevel):
                         repairstatus_id,
                         new_values["依頼日"],
                         new_values["完了日"],
-                        category_id,
+                        type_id,
                         vendor_id,
                         new_values["技術者"],
                         self.repair_id
