@@ -40,7 +40,6 @@ class EditRepairWindow(tk.Toplevel):
                 return
             self.equipment_id = self.selected_data.get("equipment_id", None)
         
-        self.create_widgets()
         if self.selected_data:
             self.populate_fields()
     # --- マスタ取得だけ分離
@@ -123,20 +122,25 @@ class EditRepairWindow(tk.Toplevel):
             self.entries[label] = entry
 
 
-        # --- PDF 一覧のラベルフレームを右側に表示 ---
+            # --- PDF一覧フレーム ---
         self.pdf_frame = tk.LabelFrame(self, text="添付PDF一覧", padx=10, pady=10)
-        self.pdf_frame.place(x=400, y=20, width=400, height=350)  # 右に配置
+        self.pdf_frame.place(x=400, y=20, width=400, height=350)
 
+        # --- ボタンフレーム ---
+        btn_frame = tk.Frame(self)
+        btn_frame.grid(row=len(self.FIELD_LABELS), column=0, columnspan=2, pady=10)
+
+        # 保存・戻るボタンは常に表示
+        tk.Button(btn_frame, text="保存", command=self.save_changes).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="戻る", command=self.destroy).pack(side=tk.LEFT, padx=5)
+
+        # 既存修理情報（編集モード）のときのみPDF表示・添付ボタンを追加
         if not self.new_mode:
             self._display_attached_pdfs()
-            btn_frame = tk.Frame(self)
-            btn_frame.grid(row=len(self.FIELD_LABELS), column=0, columnspan=2, pady=10)
-
             tk.Button(btn_frame, text="PDF添付", command=self._attach_pdf).pack(side=tk.LEFT, padx=5)
-            tk.Button(btn_frame, text="保存", command=self.save_changes).pack(side=tk.LEFT, padx=5)
-            tk.Button(btn_frame, text="戻る", command=self.destroy).pack(side=tk.LEFT, padx=5)
-
-
+        else:
+            tk.Button(btn_frame, text="保存してPDF添付", 
+            command=lambda: self.save_changes(continue_pdf=True)).pack(side=tk.LEFT, padx=5)
 
     def populate_fields(self):
         
@@ -283,14 +287,18 @@ class EditRepairWindow(tk.Toplevel):
             messagebox.showerror("エラー", f"PDFの表示中にエラーが発生しました：\n{e}")
 
     # --- save_changes ----------
-    def save_changes(self):
+    def save_changes(self, continue_pdf=False):
+        """
+        修理情報を保存する。
+        continue_pdf=True の場合、ウィンドウを閉じずにPDF添付を続ける。
+        """
         new_values = {k: e.get() for k, e in self.entries.items()}
 
         repairstatus_id = self.get_id_from_name(new_values["状態"], self.repairstatuses)
-        type_id     = self.get_id_from_name(new_values["対応"], self.types)
-        vendor_id       = self.get_id_from_name(new_values["業者"], self.vendors)
+        type_id = self.get_id_from_name(new_values["対応"], self.types)
+        vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
 
-        if None in (repairstatus_id,type_id, vendor_id):
+        if None in (repairstatus_id, type_id, vendor_id):
             messagebox.showerror("エラー", "マスタの選択値が不正です。")
             return
 
@@ -306,8 +314,8 @@ class EditRepairWindow(tk.Toplevel):
                     cur.execute("""
                         INSERT INTO repair
                         (id, equipment_id, repairstatuses, request_date, completion_date,
-                         repairtype, vendor, technician, remarks)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        repairtype, vendor, technician, details, remarks)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         new_id,
                         self.equipment_id,
@@ -317,14 +325,17 @@ class EditRepairWindow(tk.Toplevel):
                         type_id,
                         vendor_id,
                         new_values["技術者"],
+                        new_values["詳細"],
                         new_values.get("備考", "")
                     ))
+                    self.repair_id = new_id   # ← 保存後に repair_id 更新
+                    self.new_mode = False     # ← 新規→既存モードに切替
                 else:
                     # 既存更新
                     cur.execute("""
                         UPDATE repair
                         SET repairstatuses=?, request_date=?, completion_date=?,
-                            repairtype=?, vendor=?, technician=?
+                            repairtype=?, vendor=?, technician=?, details=?, remarks=?
                         WHERE id=?
                     """, (
                         repairstatus_id,
@@ -333,6 +344,8 @@ class EditRepairWindow(tk.Toplevel):
                         type_id,
                         vendor_id,
                         new_values["技術者"],
+                        new_values["詳細"],
+                        new_values.get("備考", ""),
                         self.repair_id
                     ))
 
@@ -340,9 +353,20 @@ class EditRepairWindow(tk.Toplevel):
 
             msg = "修理情報を追加しました。" if self.new_mode else "修理情報を更新しました。"
             messagebox.showinfo("完了", msg)
+
             if self.refresh_callback:
                 self.refresh_callback()
-            self.destroy()
+
+            if continue_pdf:
+                # 保存後にPDF添付モード継続
+                self._display_attached_pdfs()
+                self._attach_pdf()
+                self.lift()
+                self.focus_force()
+            else:
+                # 通常保存時は閉じる
+                self.destroy()
 
         except Exception as e:
             messagebox.showerror("DBエラー", str(e))
+        
