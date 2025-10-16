@@ -162,7 +162,7 @@ for i, (label, key) in enumerate(zip(labels, keys)):
         entry = DateEntry(form_frame, textvariable=var, date_pattern='yyyy-MM-dd')
     else:
         entry = tk.Entry(form_frame, textvariable=var)
-    entry.grid(row=i, column=1, padx=5, pady=3)
+        entry.grid(row=i, column=1, padx=5, pady=3)
 
 save_button = tk.Button(form_frame, text="保存", command=save_equipment)
 save_button.grid(row=len(labels), column=0, pady=20)
