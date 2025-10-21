@@ -362,13 +362,15 @@ class EditRepairWindow(tk.Toplevel):
                 btn_frame = self.children.get('!frame')  # create_widgets内のbtn_frame
                 if btn_frame:
                     self.pdf_attach_button = tk.Button(btn_frame, text="PDF添付", command=self._attach_pdf)
-                    self.pdf_attach_button.pack(side=tk.LEFT, padx=5)                
+                    self.pdf_attach_button.pack(side=tk.LEFT, padx=5)
+                #PDDF添付を実行
+                self._attach_pdf()
+                self.lift()
+                self.focus_force()                
             else:
                 # 通常保存時は閉じる
                 self.destroy()
-            self._attach_pdf()
-            self.lift()
-            self.focus_force()
+            
 
         except Exception as e:
             messagebox.showerror("DBエラー", str(e))

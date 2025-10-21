@@ -50,25 +50,27 @@ class RepairInfoWindow(tk.Toplevel):
         ]
     }
 
-    def __init__(self, parent: tk.Widget, equipment_id: str):
+    def __init__(self, parent: tk.Widget, equipment_db_id: int):
         """
         Args:
             parent: 呼び出し元ウィンドウ (通常は root)
             equipment_id: 表示対象の器材ID
         """
         super().__init__(parent)
-        self.title("器材情報（参照）")
-        self.geometry("1500x500")
-        self.transient(parent)     # 親ウィンドウの手前に表示
-        self.grab_set()            # モーダル表示
+        self.equipment_db_id = equipment_db_id  # ← DBの主キー
+        self.equipment_code = None              # ← 表示用の器材番号
 
-        self.equipment_id = equipment_id
         self.fetcher = MasterDataFetcher(self.DB_NAME)
-
         self.master_lookups = self._load_all_master_data_as_lookup()
         self.equipment_data: Dict[str, Any] = {}
         self.input_vars: Dict[str, tk.StringVar] = {}
         self.repair_tree: ttk.Treeview = None
+
+
+        self.title("器材情報（参照）")
+        self.geometry("1500x500")
+        self.transient(parent)     # 親ウィンドウの手前に表示
+        self.grab_set()            # モーダル表示    
 
         self._setup_ui()
         self._load_and_display_data()
@@ -150,23 +152,28 @@ class RepairInfoWindow(tk.Toplevel):
 
     def _load_and_display_data(self):
         with self._get_db_cursor() as cursor:
-            cursor.execute("SELECT * FROM equipment WHERE equipment_id = ?", (self.equipment_id,))
+            cursor.execute("SELECT * FROM equipment WHERE id = ?", (self.equipment_db_id,))
             data = cursor.fetchone()
 
         if not data:
-            messagebox.showerror("データエラー", f"器材ID = {self.equipment_id} のデータが見つかりません。")
+            messagebox.showerror("データエラー", f"器材ID = {self.equipment_db_id} のデータが見つかりません。")
             self.destroy()
             return
 
+        self.equipment_code = data[1]  # equipment.equipment_id カラム（器材番号）
         self.equipment_data = {
-            "id": data[0], "equipment_id": data[1], "name": data[2],
+            "id": data[0],
+            "equipment_code": data[1],  # ← 表示用に変更
+            "name": data[2],
             "categorie_name": self.master_lookups["categorie_master"].get(data[4], "不明"),
             "status_name": self.master_lookups["statuse_master"].get(data[5], "不明"),
             "department_name": self.master_lookups["department_master"].get(data[6], "不明"),
             "room_name": self.master_lookups["room_master"].get(data[7], "不明"),
             "manufacturer_name": self.master_lookups["manufacturer_master"].get(data[8], "不明"),
             "celler_name": self.master_lookups["celler_master"].get(data[9], "不明"),
-            "remarks": data[10], "purchase_date": data[11], "model": data[12]
+            "remarks": data[10],
+            "purchase_date": data[11],
+            "model": data[12]
         }
 
         self._update_form()
@@ -208,15 +215,20 @@ class RepairInfoWindow(tk.Toplevel):
 
     def _open_add_repair(self):
         try:
+            if not hasattr(self, "equipment_db_id") or self.equipment_db_id is None:
+                messagebox.showwarning("注意", "器材データが正しく読み込まれていません。")
+                return
+
             EditRepairWindow(
                 parent=self,
                 db_name=self.DB_NAME,
-                equipment_id=self.equipment_id,
+                equipment_id=self.equipment_db_id,  #器材IDを渡す
                 repair_id=None,
                 refresh_callback=self.refresh_repair_history
             )
         except Exception as e:
             messagebox.showerror("例外発生", f"修理情報追加中にエラーが発生しました:\n{e}")
+
 
     def _open_edit_repair(self):
         selected_ids = self.repair_tree.selection()

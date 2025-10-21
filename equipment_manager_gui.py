@@ -135,7 +135,7 @@ class EquipmentManagerApp:
         values = self.tree.item(selected[0], "values")
         equipment_id = values[1]  # 2列目に器材コード
 
-        RepairInfoWindow(self.root, equipment_id)
+        RepairInfoWindow(self.root, self.equipment_id)
 
 
     def _create_treeview(self, parent):
