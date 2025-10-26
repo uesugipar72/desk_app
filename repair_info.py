@@ -24,7 +24,7 @@ class RepairInfoWindow(tk.Toplevel):
     DB_NAME = config.get("db_name", "default.db")  # デフォルト値を設定
 
     FORM_CONFIG = [
-        ("カテゴリ名", "categorie_name"), ("器材番号", "equipment_id"),
+        ("カテゴリ名", "categorie_name"), ("器材番号", "equipment_code"),
         ("器材名", "name"), ("状態", "status_name"), ("部門", "department_name"),
         ("部屋", "room_name"), ("製造元", "manufacturer_name"), ("販売元", "celler_name"),
         ("備考", "remarks"), ("購入日", "purchase_date"), ("モデル(シリアル)", "model")
@@ -50,15 +50,15 @@ class RepairInfoWindow(tk.Toplevel):
         ]
     }
 
-    def __init__(self, parent: tk.Widget, equipment_db_id: int):
+    def __init__(self, parent: tk.Widget, equipment_code:str):
         """
         Args:
             parent: 呼び出し元ウィンドウ (通常は root)
-            equipment_id: 表示対象の器材ID
+            equipment_code: 表示対象の器材ID
         """
         super().__init__(parent)
-        self.equipment_db_id = equipment_db_id  # ← DBの主キー
-        self.equipment_code = None              # ← 表示用の器材番号
+        self.equipment_db_id = None  # ← DBの主キー
+        self.equipment_code = equipment_code              # ← 表示用の器材番号
 
         self.fetcher = MasterDataFetcher(self.DB_NAME)
         self.master_lookups = self._load_all_master_data_as_lookup()
@@ -152,18 +152,18 @@ class RepairInfoWindow(tk.Toplevel):
 
     def _load_and_display_data(self):
         with self._get_db_cursor() as cursor:
-            cursor.execute("SELECT * FROM equipment WHERE id = ?", (self.equipment_db_id,))
+            cursor.execute("SELECT * FROM equipment WHERE equipment_code = ?", (self.equipment_code,))
             data = cursor.fetchone()
 
         if not data:
-            messagebox.showerror("データエラー", f"器材ID = {self.equipment_db_id} のデータが見つかりません。")
+            messagebox.showerror("データエラー", f"器材コード = {self.equipment_code} のデータが見つかりません。")
             self.destroy()
             return
 
-        self.equipment_code = data[1]  # equipment.equipment_id カラム（器材番号）
+        self.equipment_db_id = data[0]  # ← DB主キーを保持（修理追加用に必要）
         self.equipment_data = {
             "id": data[0],
-            "equipment_code": data[1],  # ← 表示用に変更
+            "equipment_code": data[1],  # 器材コード
             "name": data[2],
             "categorie_name": self.master_lookups["categorie_master"].get(data[4], "不明"),
             "status_name": self.master_lookups["statuse_master"].get(data[5], "不明"),
@@ -178,6 +178,7 @@ class RepairInfoWindow(tk.Toplevel):
 
         self._update_form()
         self.refresh_repair_history()
+
 
     def _update_form(self):
         for key, var in self.input_vars.items():
@@ -201,11 +202,11 @@ class RepairInfoWindow(tk.Toplevel):
             LEFT JOIN repair_statuse_master rs ON r.repairstatuses = rs.id
             LEFT JOIN repair_type_master rt ON r.repairtype = rt.id
             LEFT JOIN celler_master c ON r.vendor = c.id
-            WHERE r.equipment_id = ?
+            WHERE r.equipment_code = ?
             ORDER BY r.request_date DESC;
         """
         with self._get_db_cursor() as cursor:
-            cursor.execute(query, (self.equipment_data["equipment_id"],))
+            cursor.execute(query, (self.equipment_code,),)
             repairs = cursor.fetchall()
 
         for row in repairs:
@@ -215,14 +216,14 @@ class RepairInfoWindow(tk.Toplevel):
 
     def _open_add_repair(self):
         try:
-            if not hasattr(self, "equipment_db_id") or self.equipment_db_id is None:
-                messagebox.showwarning("注意", "器材データが正しく読み込まれていません。")
+            if not getattr(self, "equipment_code", None):
+                messagebox.showwarning("注意", "器材が選択されていません。")
                 return
 
             EditRepairWindow(
                 parent=self,
                 db_name=self.DB_NAME,
-                equipment_id=self.equipment_db_id,  #器材IDを渡す
+                equipment_code=self.equipment_code,
                 repair_id=None,
                 refresh_callback=self.refresh_repair_history
             )
@@ -241,7 +242,8 @@ class RepairInfoWindow(tk.Toplevel):
             EditRepairWindow(
                 parent=self,
                 db_name=self.DB_NAME,
-                repair_id=repair_id,
+                equipment_code=self.equipment_code,
+                repair_id=repair_id,                
                 refresh_callback=self.refresh_repair_history
             )
         except Exception as e:

@@ -89,13 +89,13 @@ def search():
             break
 
     # 他の検索条件の取得
-    equipment_id = entries["機器コード"].get() if entries["機器コード"].get() else None
+    equipment_code = entries["機器コード"].get() if entries["機器コード"].get() else None
     name = entries["機器名"].get() if entries["機器名"].get() else None
     name_kana = entries["機器名カナ"].get() if entries["機器名カナ"].get() else None
     remarks = entries["備考"].get() if entries["備考"].get() else None
     manufacturer = entries["製造元"].get() if entries["製造元"].get() else None
 
-    print(f"機器コード: {equipment_id}")
+    print(f"機器コード: {equipment_code}")
     print(f"機器名: {name}")
     print(f"機器名カナ: {name_kana}")
     print(f"分類ID: {category_id}")
@@ -108,7 +108,7 @@ def search():
     print(f"販売元ID: {celler_id}")
     # データ取得
     
-    records = fetch_data(equipment_id, name, name_kana, category_id, statuse_id, department_id, room_id , manufacturer_id, celler_id, remarks)
+    records = fetch_data(equipment_code, name, name_kana, category_id, statuse_id, department_id, room_id , manufacturer_id, celler_id, remarks)
     # print(f"レコード内容; {records}")
     # 既存のデータをクリア
     for row in tree.get_children():
@@ -205,8 +205,8 @@ def on_tree_item_double_click(event):
     selected_item = tree.selection()
     if selected_item:
         values = tree.item(selected_item[0], "values")
-        equipment_id = values[1]  # 「機器コード」列
-        subprocess.run(["python", "repair_info.py", equipment_id])
+        equipment_code = values[1]  # 「機器コード」列
+        subprocess.run(["python", "repair_info.py", equipment_code])
         root.focus_force()
         search()
 

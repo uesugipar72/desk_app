@@ -133,9 +133,9 @@ class EquipmentManagerApp:
         if not selected:
             return
         values = self.tree.item(selected[0], "values")
-        equipment_id = values[1]  # 2列目に器材コード
+        equipment_code = values[1]  # 2列目に器材コード
 
-        RepairInfoWindow(self.root, self.equipment_id)
+        RepairInfoWindow(self.root, equipment_code)
 
 
     def _create_treeview(self, parent):
@@ -181,13 +181,13 @@ class EquipmentManagerApp:
         celler_name = self.entries["販売元"].get()
         celler_id = next((id for id, name in self.cellers if name == celler_name), None)
 
-        equipment_id = self.entries["機器コード"].get()
+        equipment_code = self.entries["機器コード"].get()
         name = self.entries["機器名"].get()
         name_kana = self.entries["機器名カナ"].get()
         remarks = self.entries["備考"].get()
 
         try:
-            records = fetch_data(equipment_id, name, name_kana, category_id, status_id,
+            records = fetch_data(equipment_code, name, name_kana, category_id, status_id,
                          department_id, room_id, manufacturer_id, celler_id, remarks)
             if not records:
                 messagebox.showinfo("情報", "該当するデータがありません。")

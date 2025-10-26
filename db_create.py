@@ -12,7 +12,7 @@ table_creation_query = """
 CREATE TABLE IF NOT EXISTS equipment (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    equipment_id INTEGER UNIQUE NOT NULL,
+    equipment_code INTEGER UNIQUE NOT NULL,
     categorie_id INTEGER NOT NULL,
     purchase_date TEXT NOT NULL,
     status_id INTEGER NOT NULL,

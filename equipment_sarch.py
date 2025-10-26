@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import os,json
 
-def fetch_data(equipment_id=None, name=None, name_kana=None, categorie_id=None, statuse_id=None, department_id=None ,room_id=None, manufacturer_id=None, celler_id=None, remarks=None):
+def fetch_data(equipment_code=None, name=None, name_kana=None, categorie_id=None, statuse_id=None, department_id=None ,room_id=None, manufacturer_id=None, celler_id=None, remarks=None):
     """
     検索条件に基づいてデータを抽出
     """
@@ -18,15 +18,15 @@ def fetch_data(equipment_id=None, name=None, name_kana=None, categorie_id=None, 
         
         # 検索条件のリストとパラメータリストを準備
         query = """
-            SELECT id, equipment_id, name, name_kana, categorie_id, statuse_id, department_id, room_id, manufacturer_id, celler_id, remarks, purchase_date, model
+            SELECT id, equipment_code, name, name_kana, categorie_id, statuse_id, department_id, room_id, manufacturer_id, celler_id, remarks, purchase_date, model
             FROM equipment
             WHERE 1=1
         """
         params = []
         
-        if equipment_id:
-            query += " AND equipment_id LIKE ?"
-            params.append(f"%{equipment_id}%")  # 部分一致検索
+        if equipment_code:
+            query += " AND equipment_code LIKE ?"
+            params.append(f"%{equipment_code}%")  # 部分一致検索
         if name:
             query += " AND name LIKE ?"
             params.append(f"%{name}%")

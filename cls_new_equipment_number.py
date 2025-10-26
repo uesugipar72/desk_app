@@ -1,14 +1,14 @@
 import sqlite3
 
 class EquipmentManager:
-    def get_next_equipment_id(self) -> str:
-        """DBのequipment_idの最大値に1を加えた値を取得"""
+    def get_next_equipment_code(self) -> str:
+        """DBのequipment_codeの最大値に1を加えた値を取得"""
         try:
             conn = sqlite3.connect("equipment_management.db")
             cursor = conn.cursor()
             
-            # equipment_id の最大値を取得
-            cursor.execute("SELECT MAX(equipment_id) FROM equipment")
+            # equipment_code の最大値を取得
+            cursor.execute("SELECT MAX(equipment_code) FROM equipment")
             max_id = cursor.fetchone()[0]
             
             # 最大値が None（レコードが存在しない）場合は 1 を設定
@@ -24,5 +24,5 @@ class EquipmentManager:
 
 # 使用例
 manager = EquipmentManager()
-next_equipment_id = manager.get_next_equipment_id()
-print(f"次の機器ID: {next_equipment_id}")
+next_equipment_code = manager.get_next_equipment_code()
+print(f"次の機器ID: {next_equipment_code}")

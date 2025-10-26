@@ -53,15 +53,15 @@ def get_id_from_name(name, data_list):
             return item_id
     return None  # 該当なしの場合はNone
 
-def display_repair_history(equipment_id):
+def display_repair_history(equipment_code):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT status, request_date, completion_date, category, vendor, technician
         FROM repair
-        WHERE equipment_id = ?
+        WHERE equipment_code = ?
         ORDER BY request_date DESC;
-    """, (equipment_id,))
+    """, (equipment_code,))
     repairs = cursor.fetchall()
     conn.close()
 
@@ -100,7 +100,7 @@ def save_equipment():
             query = """
             UPDATE equipment
             SET categorie_id = ?, name = ?, statuse_id = ?, department_id = ?, room_id = ?, manufacturer_id=?, celler_id = ?, purchase_date = ?, remarks = ?, model = ?
-            WHERE equipment_id = ?;
+            WHERE equipment_code = ?;
             """
             cursor.execute(query, (
                 categorie_id,
@@ -113,7 +113,7 @@ def save_equipment():
                 updated_data.get("purchase_date", equipment_data["purchase_date"]),
                 updated_data.get("remarks", equipment_data["remarks"]),
                 updated_data.get("model", equipment_data["model"]),
-                equipment_data["equipment_id"]
+                equipment_data["equipment_code"]
             ))
 
             conn.commit()
@@ -146,7 +146,7 @@ repair_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 input_vars = {}
 labels = ["カテゴリ名", "器材番号", "器材名", "状態", "部門", "部屋", "製造元","販売元", "備考","購入日", "モデル(シリアル)"]
-keys = ["categorie_name", "equipment_id", "name", "statuse_name", "department_name", "room_name", "manufacturer_name", "celler_name", "remarks", "purchase_date", "model"]
+keys = ["categorie_name", "equipment_code", "name", "statuse_name", "department_name", "room_name", "manufacturer_name", "celler_name", "remarks", "purchase_date", "model"]
 
 for i, (label, key) in enumerate(zip(labels, keys)):
     tk.Label(form_frame, text=label).grid(row=i, column=0, padx=5, pady=3)
@@ -170,7 +170,7 @@ save_button.grid(row=len(labels), column=0, pady=20)
 cancel_button = tk.Button(form_frame, text="戻る", command=cancel_edit)
 cancel_button.grid(row=len(labels), column=1, pady=20)
 
-if equipment_data.get("equipment_id"):
-    display_repair_history(equipment_data["equipment_id"])
+if equipment_data.get("equipment_code"):
+    display_repair_history(equipment_data["equipment_code"])
 
 root_edit.mainloop()

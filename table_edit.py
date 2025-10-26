@@ -12,7 +12,7 @@ cursor = conn.cursor()
 # CREATE TABLE IF NOT EXISTS equipment (
 #     id INTEGER PRIMARY KEY AUTOINCREMENT,
 #     name TEXT NOT NULL,
-#     equipment_id TEXT UNIQUE NOT NULL,
+#     equipment_code TEXT UNIQUE NOT NULL,
 #     categorie TEXT NOT NULL,
 #     purchase_date TEXT,
 #     status TEXT CHECK(status IN ('使用中', '良好', '修理中', '廃棄')) DEFAULT '良好',
@@ -23,7 +23,7 @@ cursor = conn.cursor()
 table_creation_query = """
 CREATE TABLE IF NOT EXISTS repair (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    equipment_id INTEGER NOT NULL,
+    equipment_code INTEGER NOT NULL,
     status TEXT CHECK(status IN ('依頼中', '修理中', '完了', 'キャンセル')) DEFAULT '依頼中',
     request_date TEXT,
     completion_date TEXT,
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS repair (
     technician TEXT,
     cost REAL,
     remarks TEXT,
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
+    FOREIGN KEY (equipment_code) REFERENCES equipment(id) ON DELETE CASCADE
 );
 """
 

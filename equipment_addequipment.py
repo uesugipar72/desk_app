@@ -29,7 +29,7 @@ def get_id_from_name(name, data_list):
 def add_equipment():
     """新規器材をデータベースに登録"""
     new_data = {key: var.get() for key, var in input_vars.items()}
-    new_data["equipment_id"] = equipment_id  # 事前に取得したIDを使用
+    new_data["equipment_code"] = equipment_code  # 事前に取得したIDを使用
 
     try:
         conn = sqlite3.connect(db_name)
@@ -44,11 +44,11 @@ def add_equipment():
         celler_id = get_id_from_name(new_data["celler_name"], cellers)
 
         query = """
-        INSERT INTO equipment (equipment_id, categorie_id, name, statuse_id, department_id, room_id, manufacturer_id, celler_id, purchase_date, remarks)
+        INSERT INTO equipment (equipment_code, categorie_id, name, statuse_id, department_id, room_id, manufacturer_id, celler_id, purchase_date, remarks)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         cursor.execute(query, (
-            new_data["equipment_id"],
+            new_data["equipment_code"],
             categorie_id,
             new_data["name"],
             statuse_id,
@@ -72,12 +72,12 @@ root_add = tk.Tk()
 root_add.title("新規器材登録")
 root_add.geometry("400x550")
 
-# ** 事前に新しい equipment_id を取得 **
-equipment_id = manager.get_next_equipment_id()
+# ** 事前に新しい equipment_code を取得 **
+equipment_code = manager.get_next_equipment_code()
 
-# ** equipment_id の表示 **
+# ** equipment_code の表示 **
 tk.Label(root_add, text="器材番号").grid(row=0, column=0, padx=10, pady=5)
-tk.Label(root_add, text=equipment_id, fg="blue", font=("Arial", 12, "bold")).grid(row=0, column=1, padx=10, pady=5)
+tk.Label(root_add, text=equipment_code, fg="blue", font=("Arial", 12, "bold")).grid(row=0, column=1, padx=10, pady=5)
 
 # ** 各種入力フィールド **
 input_vars = {}

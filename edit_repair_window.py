@@ -12,13 +12,14 @@ from tkinter import filedialog
 class EditRepairWindow(tk.Toplevel):
 
     FIELD_LABELS = ["状態", "依頼日", "完了日", "対応", "業者", "技術者", "詳細", "備考"]
-    REPAIR_FIELDS = ["id", "equipment_id", "repairstatuses", "repairtype", "request_date", "completion_date", "details", "vendor", "technician", "remarks"]
+    REPAIR_FIELDS = ["id", "equipment_code", "repairstatuses", "repairtype", "request_date", "completion_date", "details", "vendor", "technician", "remarks"]
     # --- __init__ ----------
-    def __init__(self, parent, db_name, equipment_id=None, repair_id=None, refresh_callback=None):
+    def __init__(self, parent, db_name, equipment_code=None, repair_id=None, refresh_callback=None):
         super().__init__(parent)
         self.title("修理情報修正")
         self.db_name = db_name
         self.repair_id = repair_id
+        self.equipment_code = equipment_code
         self.refresh_callback = refresh_callback
         self.new_mode = (repair_id in (None, "", 0))   # ← ★ 新規判定s
         self.geometry("900x600")
@@ -38,7 +39,7 @@ class EditRepairWindow(tk.Toplevel):
                 messagebox.showerror("エラー", f"ID={repair_id} の修理情報が見つかりません。")
                 self.destroy()
                 return
-            self.equipment_id = self.selected_data.get("equipment_id", None)
+            self.repair_id = self.selected_data.get("id", None)
         
         if self.selected_data:
             self.populate_fields()
@@ -69,7 +70,7 @@ class EditRepairWindow(tk.Toplevel):
 
                 # 修理情報を取得
                 cursor.execute("""
-                    SELECT id, equipment_id, repairstatuses, repairtype, request_date,completion_date,
+                    SELECT id, equipment_code, repairstatuses, repairtype, request_date,completion_date,
                                details, vendor, technician, remarks
                     FROM repair
                     WHERE id = ?
@@ -81,7 +82,7 @@ class EditRepairWindow(tk.Toplevel):
                     return None
 
                 # 修理に紐づく器材IDを保存
-                self.equipment_id = data["equipment_id"] 
+                self.repair_id = data["id"] 
 
                 # 各種マスタ再取得
                 cursor.execute("SELECT id, name FROM repair_type_master")
@@ -313,12 +314,12 @@ class EditRepairWindow(tk.Toplevel):
 
                     cur.execute("""
                         INSERT INTO repair
-                        (id, equipment_id, repairstatuses, request_date, completion_date,
+                        (id, equipment_code, repairstatuses, request_date, completion_date,
                         repairtype, vendor, technician, details, remarks)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         new_id,
-                        self.equipment_id,
+                        self.equipment_code,
                         repairstatus_id,
                         new_values["依頼日"],
                         new_values["完了日"],

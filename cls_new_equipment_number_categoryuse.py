@@ -22,8 +22,8 @@ class EquipmentManager:
             conn = sqlite3.connect("equipment_management.db")
             cursor = conn.cursor()
             query = """
-                SELECT equipment_id FROM equipment
-                WHERE equipment_id = ?
+                SELECT equipment_code FROM equipment
+                WHERE equipment_code = ?
             """
             cursor.execute(query, (self.field_code,))
             rows = cursor.fetchall()
