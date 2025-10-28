@@ -114,16 +114,15 @@ class EditRepairWindow(tk.Toplevel):
                 entry = ttk.Combobox(self, values=list(self.repairstatuses.values()), state="readonly")
             elif label == "業者":
                 entry = ttk.Combobox(self, values=list(self.vendors.values()), state="readonly")
-            elif label == "備考":
-                entry = tk.Entry(self, width=40)
+            elif label in ("備考", "詳細"):  # ← ここをまとめてTextにする
+                entry = tk.Text(self, width=40, height=3)  # ← 縦サイズ3倍
             else:
-                entry = tk.Entry(self)
+                entry = tk.Entry(self, width=40)
 
-            entry.grid(row=i, column=1, padx=5, pady=5)
+            entry.grid(row=i, column=1, padx=5, pady=5, sticky="we")
             self.entries[label] = entry
 
-
-            # --- PDF一覧フレーム ---
+        # --- PDF一覧フレーム ---
         self.pdf_frame = tk.LabelFrame(self, text="添付PDF一覧", padx=10, pady=10)
         self.pdf_frame.place(x=400, y=20, width=400, height=350)
 

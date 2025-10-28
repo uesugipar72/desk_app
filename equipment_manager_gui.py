@@ -18,13 +18,13 @@ class EquipmentManagerApp:
         self.root = root
         self.root.title("器材管理システム")
         self.root.geometry("1400x750")
+
         # JSON設定ファイルを読み込む
         config_path = os.path.join(os.path.dirname(__file__), "config.json")
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
 
-        self.db_name = config.get("db_name", "equipment_management.db")  # デフォルトあり
-
+        self.db_name = config.get("db_name", "equipment_management.db")
         self.fetcher = MasterDataFetcher(self.db_name)
         self.entries = {}
 
@@ -32,14 +32,60 @@ class EquipmentManagerApp:
         self._create_widgets()
         self._create_menus()
 
+    # ===== 共通ユーティリティ =====
+    def clear_widget(self, widget):
+        """Entry, Combobox, Text などの入力ウィジェットを安全にクリア"""
+        if isinstance(widget, ttk.Combobox):
+            widget.set("")
+        elif isinstance(widget, tk.Text):
+            widget.delete("1.0", tk.END)
+        else:
+            try:
+                widget.delete(0, tk.END)
+            except Exception:
+                pass
+
+    def get_widget_value(self, widget):
+        """ウィジェットの値を安全に取得"""
+        if isinstance(widget, ttk.Combobox):
+            return widget.get().strip()
+        elif isinstance(widget, tk.Text):
+            return widget.get("1.0", "end-1c").strip()
+        else:
+            try:
+                return widget.get().strip()
+            except Exception:
+                return ""
+
+    def set_widget_value(self, widget, value):
+        """ウィジェットに値を安全に設定"""
+        if value is None:
+            value = ""
+        if isinstance(widget, ttk.Combobox):
+            widget.set(value)
+        elif isinstance(widget, tk.Text):
+            widget.delete("1.0", tk.END)
+            widget.insert("1.0", value)
+        else:
+            try:
+                widget.delete(0, tk.END)
+                widget.insert(0, value)
+            except Exception:
+                pass
+
+    # ===== データ読込 =====
     def _load_master_data(self):
         self.categorys = self.fetcher.fetch_all("categorie_master") or [(1, "検査機器"), (2, "一般備品"), (3, "消耗品"), (4, "その他")]
         self.statuses = self.fetcher.fetch_all("statuse_master") or [(1, "使用中"), (2, "良好"), (3, "修理中"), (4, "廃棄")]
         self.departments = self.fetcher.fetch_all("department_master") or [(1, "検査科"), (2, "検体検査"), (3, "生理検査"), (4, "細菌検査"), (5, "病理検査"), (6, "採血室")]
         self.cellers = self.fetcher.fetch_all("celler_master") or []
         self.manufacturers = self.fetcher.fetch_all("manufacturer_master") or []
-        self.rooms = self.fetcher.fetch_all("room_master") or [(1, "受付_染色室"), (2, "鏡検室"), (3, "臓器固定・切出室"), (4, "標本作製室"), (5, "病理標本保人室"), (6, "病理診断室"), (8, "剖検室"), (9, "剖検前室")]
+        self.rooms = self.fetcher.fetch_all("room_master") or [
+            (1, "受付_染色室"), (2, "鏡検室"), (3, "臓器固定・切出室"), (4, "標本作製室"),
+            (5, "病理標本保人室"), (6, "病理診断室"), (8, "剖検室"), (9, "剖検前室")
+        ]
 
+    # ===== メニュー作成 =====
     def _create_menus(self):
         menubar = tk.Menu(self.root)
         master_menu = tk.Menu(menubar, tearoff=0)
@@ -61,6 +107,7 @@ class EquipmentManagerApp:
         conn.close()
         return tables
 
+    # ===== メイン画面 =====
     def _create_widgets(self):
         self.root.option_add("*Font", ("MS UI Gothic", 11))
 
@@ -71,13 +118,13 @@ class EquipmentManagerApp:
         frame_table = ttk.Frame(self.root)
         frame_table.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        # Facility Label
         ttk.Label(frame_top, text="施設:").grid(row=0, column=0, padx=5, pady=5)
         entry_facility = ttk.Entry(frame_top)
         entry_facility.grid(row=0, column=1, padx=5, pady=5)
         entry_facility.insert(0, "0000000001 複十字病院　病理診断科")
 
-        labels = ["機器分類", "機器コード", "機器名", "機器名カナ", "機器状況", "部門", "部屋", "備考", "製造元", "販売元"]
+        labels = ["機器分類", "機器コード", "機器名", "機器名カナ", "機器状況",
+                  "部門", "部屋", "備考", "製造元", "販売元"]
         for i, label in enumerate(labels):
             ttk.Label(frame_search, text=label).grid(row=i//4, column=(i%4)*2, padx=5, pady=5)
             combo_values = []
@@ -108,22 +155,20 @@ class EquipmentManagerApp:
         ttk.Button(frame_search, text="Excel出力", command=self.export_to_excel).grid(row=3, column=2, padx=5, pady=5)
 
         self.tree = self._create_treeview(frame_table)
-
-        # ダブルクリック時 → 共通メソッドを呼ぶ
         self.tree.bind("<Double-1>", self.open_repair_info)
 
-        # ▼右クリックメニューを追加
+        # 右クリックメニュー
         self.tree_menu = tk.Menu(self.root, tearoff=0)
         self.tree_menu.add_command(label="開く", command=self.open_repair_info)
+        self.tree.bind("<Button-3>", self.show_tree_menu)
 
-        self.tree.bind("<Button-3>", self.show_tree_menu)  # 右クリックでメニュー表示
-
+    # ===== イベント =====
     def show_tree_menu(self, event):
         """右クリックメニューを表示"""
         try:
             item = self.tree.identify_row(event.y)
-            if item:  # 行の上でクリックされた場合
-                self.tree.selection_set(item)  # 選択状態にする
+            if item:
+                self.tree.selection_set(item)
                 self.tree_menu.post(event.x_root, event.y_root)
         finally:
             self.tree_menu.grab_release()
@@ -134,21 +179,27 @@ class EquipmentManagerApp:
             return
         values = self.tree.item(selected[0], "values")
         equipment_code = values[1]  # 2列目に器材コード
-
         RepairInfoWindow(self.root, equipment_code)
 
+    def reset_conditions(self):
+        """全検索条件をリセット"""
+        print("条件初期化")
+        for widget in self.entries.values():
+            self.clear_widget(widget)
 
+    # ===== Treeview =====
     def _create_treeview(self, parent):
-        columns = ["機器分類", "機器コード", "機器名", "状態", "部門", "部屋", "製造元", "販売元", "備考", "購入日", "モデル"]
+        columns = ["機器分類", "機器コード", "機器名", "状態", "部門", "部屋",
+                   "製造元", "販売元", "備考", "購入日", "モデル"]
         tree = ttk.Treeview(parent, columns=columns, show="headings")
         for col in columns:
             tree.heading(col, text=col)
             tree.column(col, width=150, anchor="w")
+
         tree.tag_configure("evenrow", background="#F0F0FF")
         tree.tag_configure("oddrow", background="#FFFFFF")
         tree.grid(row=0, column=0, sticky="nsew")
 
-        # Scrollbars
         scrollbar_y = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
         scrollbar_y.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=scrollbar_y.set)
@@ -159,9 +210,9 @@ class EquipmentManagerApp:
 
         parent.grid_rowconfigure(0, weight=1)
         parent.grid_columnconfigure(0, weight=1)
-
         return tree
 
+    # ===== 検索処理 =====
     def search(self):
         category_name = self.entries["機器分類"].get()
         category_id = next((id for id, name in self.categorys if name == category_name), None)
@@ -188,11 +239,11 @@ class EquipmentManagerApp:
 
         try:
             records = fetch_data(equipment_code, name, name_kana, category_id, status_id,
-                         department_id, room_id, manufacturer_id, celler_id, remarks)
+                                 department_id, room_id, manufacturer_id, celler_id, remarks)
             if not records:
                 messagebox.showinfo("情報", "該当するデータがありません。")
-            else:
-                print(f"取得データ数 = {len(records)}")
+                return
+            print(f"取得データ数 = {len(records)}")
         except Exception as e:
             print(f"fetch_data でエラー: {e}")
             messagebox.showerror("エラー", f"データ取得中にエラーが発生しました。\n{e}")
@@ -214,30 +265,25 @@ class EquipmentManagerApp:
                 record[10], record[11], record[12]
             ), tags=(tag,))
 
-    def reset_conditions(self):
-        print("条件初期化")
-        for widget in self.entries.values():
-            if isinstance(widget, ttk.Combobox):
-                widget.set("")
-            else:
-                widget.delete(0, tk.END)
-
+    # ===== Excel出力 =====
     def export_to_excel(self):
         all_data = [self.tree.item(item, "values") for item in self.tree.get_children()]
         if not all_data:
             messagebox.showinfo("情報", "エクスポートするデータがありません。")
             return
 
-        headers = ["機器分類", "機器コード", "機器名", "状態", "部門", "部屋", "製造元", "販売元", "備考", "購入日", "モデル"]
+        headers = ["機器分類", "機器コード", "機器名", "状態", "部門", "部屋",
+                   "製造元", "販売元", "備考", "購入日", "モデル"]
         now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"export_{now_str}.xlsx"
         output_folder = r"C:\\desk_app\\export_files"
+
         json_data = json.dumps(all_data, ensure_ascii=False)
         json_headers = json.dumps(headers, ensure_ascii=False)
 
         subprocess.run(["python", "export_to_excel.py", json_data, json_headers, output_folder, file_name])
 
-    
+
 def main():
     try:
         root = tk.Tk()
