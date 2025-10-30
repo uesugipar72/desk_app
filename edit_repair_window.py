@@ -1,377 +1,244 @@
 import os
-import subprocess
-import tkinter as tk
-from tkinter import messagebox, ttk
-from tkinter import filedialog, simpledialog
-from tkcalendar import DateEntry
-import sqlite3
-from nullable_date_entry import NullableDateEntry
 import shutil
-from tkinter import filedialog
+import sqlite3
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+from tkcalendar import DateEntry
+from nullable_date_entry import NullableDateEntry
+from datetime import datetime
+
 
 class EditRepairWindow(tk.Toplevel):
-
     FIELD_LABELS = ["状態", "依頼日", "完了日", "対応", "業者", "技術者", "詳細", "備考"]
-    REPAIR_FIELDS = ["id", "equipment_code", "repairstatuses", "repairtype", "request_date", "completion_date", "details", "vendor", "technician", "remarks"]
-    # --- __init__ ----------
+
     def __init__(self, parent, db_name, equipment_code=None, repair_id=None, refresh_callback=None):
         super().__init__(parent)
-        self.title("修理情報修正")
+        self.title("修理情報 編集ウィンドウ")
+        self.geometry("600x500")
+
         self.db_name = db_name
-        self.repair_id = repair_id
         self.equipment_code = equipment_code
+        self.repair_id = repair_id
         self.refresh_callback = refresh_callback
-        self.new_mode = (repair_id in (None, "", 0))   # ← ★ 新規判定s
-        self.geometry("900x600")
-        self.resizable(False, False)
         self.entries = {}
-        # マスタデータは常に取得
-        self._fetch_masters()
 
-        self.create_widgets()
-        
-        # データベースから修理情報・マスタデータを取得
-        # 既存データ取得
-        self.selected_data = None
-        if not self.new_mode:
-            self.selected_data = self.fetch_repair_data()
-            if not self.selected_data:
-                messagebox.showerror("エラー", f"ID={repair_id} の修理情報が見つかりません。")
-                self.destroy()
-                return
-            self.repair_id = self.selected_data.get("id", None)
-        
-        if self.selected_data:
-            self.populate_fields()
-    # --- マスタ取得だけ分離
-    def _fetch_masters(self):
-        with sqlite3.connect(self.db_name) as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT id, name FROM repair_type_master")
-            rows = cur.fetchall()
-            self.types = dict(rows) if rows else {}
+        # === マスター取得 ===
+        self.statuses = self.fetch_master("repair_status_master")
+        self.types = self.fetch_master("repair_type_master")
+        self.vendors = self.fetch_master("vendor_master")
 
-            cur.execute("SELECT id, name FROM repair_statuse_master")
-            rows = cur.fetchall()
-            self.repairstatuses = dict(rows) if rows else {}
+        self._create_widgets()
 
-            cur.execute("SELECT id, name FROM celler_master")
-            rows = cur.fetchall()
-            self.vendors = dict(rows) if rows else {}
+        if repair_id:
+            self.load_repair_data(repair_id)
 
-    def fetch_repair_data(self):
-        """repair_id に対応する修理情報とマスタデータを取得。"""
-        if not self.repair_id:
-            return None
+    # ========= マスター読込 =========
+    def fetch_master(self, table_name):
+        """マスターデータ（id→name辞書）を取得"""
         try:
             with sqlite3.connect(self.db_name) as conn:
-                conn.row_factory = sqlite3.Row  # dict のように扱える
                 cursor = conn.cursor()
-
-                # 修理情報を取得
-                cursor.execute("""
-                    SELECT id, equipment_code, repairstatuses, repairtype, request_date,completion_date,
-                               details, vendor, technician, remarks
-                    FROM repair
-                    WHERE id = ?
-                """, (self.repair_id,))
-                row = cursor.fetchone()
-                data = dict(row) if row else None
-
-                if not data:
-                    return None
-
-                # 修理に紐づく器材IDを保存
-                self.repair_id = data["id"] 
-
-                # 各種マスタ再取得
-                cursor.execute("SELECT id, name FROM repair_type_master")
-                self.types = dict(cursor.fetchall())
-
-                cursor.execute("SELECT id, name FROM repair_statuse_master")
-                self.repairstatuses = dict(cursor.fetchall())
-
-                cursor.execute("SELECT id, name FROM celler_master")
-                self.vendors = dict(cursor.fetchall())
-
-                return data
-
+                cursor.execute(f"SELECT id, name FROM {table_name}")
+                return dict(cursor.fetchall())
         except Exception as e:
-            messagebox.showerror("DBエラー", f"修理情報取得中にエラーが発生しました:\n{e}")
-            return None
+            print(f"マスター取得エラー({table_name}): {e}")
+            return {}
 
-    def create_widgets(self):
-        self.entries = {}
+    # ========= 共通ウィジェット関数 =========
+    def clear_widget(self, widget):
+        """ウィジェットを安全にクリア"""
+        if isinstance(widget, ttk.Combobox):
+            widget.set("")
+        elif isinstance(widget, tk.Text):
+            widget.delete("1.0", tk.END)
+        elif isinstance(widget, (tk.Entry, NullableDateEntry, DateEntry)):
+            widget.delete(0, tk.END)
+        else:
+            pass
 
+    def get_widget_value(self, widget):
+        """ウィジェットの値を安全に取得"""
+        try:
+            if isinstance(widget, ttk.Combobox):
+                return widget.get().strip()
+            elif isinstance(widget, tk.Text):
+                return widget.get("1.0", "end-1c").strip()
+            elif isinstance(widget, (tk.Entry, NullableDateEntry, DateEntry)):
+                val = widget.get().strip()
+                return val if val not in ("", "None", "0000-00-00") else None
+            else:
+                return ""
+        except Exception:
+            return ""
+
+    def set_widget_value(self, widget, value):
+        """ウィジェットに値を安全に設定（DateEntry対応）"""
+        if value in (None, "", "0000-00-00", "None"):
+            value = ""
+
+        # DateEntry / NullableDateEntry
+        if isinstance(widget, (DateEntry, NullableDateEntry)):
+            try:
+                if value:
+                    widget.set_date(value)
+                else:
+                    widget.delete(0, tk.END)
+            except Exception:
+                widget.delete(0, tk.END)
+            return
+
+        # Combobox
+        if isinstance(widget, ttk.Combobox):
+            widget.set(value)
+            return
+
+        # Text
+        if isinstance(widget, tk.Text):
+            widget.delete("1.0", tk.END)
+            widget.insert("1.0", value)
+            return
+
+        # Entry / その他
+        try:
+            widget.delete(0, tk.END)
+            widget.insert(0, value)
+        except Exception:
+            pass
+
+    # ========= ウィジェット作成 =========
+    def _create_widgets(self):
         for i, label in enumerate(self.FIELD_LABELS):
-            tk.Label(self, text=label).grid(row=i, column=0, padx=5, pady=5)
+            tk.Label(self, text=label).grid(row=i, column=0, padx=5, pady=5, sticky="e")
 
             if "日" in label:
                 entry = NullableDateEntry(self, date_pattern="yyyy-mm-dd")
             elif label == "対応":
                 entry = ttk.Combobox(self, values=list(self.types.values()), state="readonly")
             elif label == "状態":
-                entry = ttk.Combobox(self, values=list(self.repairstatuses.values()), state="readonly")
+                entry = ttk.Combobox(self, values=list(self.statuses.values()), state="readonly")
             elif label == "業者":
                 entry = ttk.Combobox(self, values=list(self.vendors.values()), state="readonly")
-            elif label in ("備考", "詳細"):  # ← ここをまとめてTextにする
-                entry = tk.Text(self, width=40, height=3)  # ← 縦サイズ3倍
+            elif label in ("詳細", "備考"):
+                entry = tk.Text(self, width=40, height=3)
             else:
-                entry = tk.Entry(self, width=40)
+                entry = tk.Entry(self)
 
-            entry.grid(row=i, column=1, padx=5, pady=5, sticky="we")
+            entry.grid(row=i, column=1, padx=5, pady=5, sticky="w")
             self.entries[label] = entry
 
-        # --- PDF一覧フレーム ---
-        self.pdf_frame = tk.LabelFrame(self, text="添付PDF一覧", padx=10, pady=10)
-        self.pdf_frame.place(x=400, y=20, width=400, height=350)
+        # ボタン
+        tk.Button(self, text="保存", command=self.save_changes).grid(
+            row=len(self.FIELD_LABELS), column=0, pady=10
+        )
+        tk.Button(self, text="PDF添付", command=self.attach_pdf).grid(
+            row=len(self.FIELD_LABELS), column=1, pady=10, sticky="w"
+        )
 
-        # --- ボタンフレーム ---
-        btn_frame = tk.Frame(self)
-        btn_frame.grid(row=len(self.FIELD_LABELS), column=0, columnspan=2, pady=10)
-
-        # 保存・戻るボタンは常に表示
-        tk.Button(btn_frame, text="保存", command=self.save_changes).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="戻る", command=self.destroy).pack(side=tk.LEFT, padx=5)
-
-        # 既存修理情報（編集モード）のときのみPDF表示・添付ボタンを追加
-        if not self.new_mode:
-            self._display_attached_pdfs()
-            tk.Button(btn_frame, text="PDF添付", command=self._attach_pdf).pack(side=tk.LEFT, padx=5)
-        else:
-            tk.Button(btn_frame, text="保存してPDF添付", 
-            command=lambda: self.save_changes(continue_pdf=True)).pack(side=tk.LEFT, padx=5)
-
-    def populate_fields(self):
-        
-        if not self.selected_data:
-            messagebox.showerror("エラー", "修理情報が取得できませんでした。")
-            return
-        
-        # ID（int）で取得（カンマ不要）
-        repairstatus_id = self.selected_data["repairstatuses"]
-        type_id = self.selected_data["repairtype"]
-        vendor_id = self.selected_data["vendor"]
-
-        values = [
-            self.get_name_from_id(repairstatus_id, self.repairstatuses),   # 状態
-            self.selected_data["request_date"],                      # 依頼日
-            self.selected_data["completion_date"],                   # 完了日
-            self.get_name_from_id(type_id, self.types),          # 対応
-            self.get_name_from_id(vendor_id, self.vendors),          # 業者
-            self.selected_data["technician"],                        # 技術者
-            self.selected_data["details"],                           # 詳細
-            self.selected_data["remarks"],                           # 備考
-        ]
-
-        for key, value in zip(self.FIELD_LABELS, values):
-            widget = self.entries.get(key)
-            if widget:
-                if isinstance(widget, DateEntry):
-                    if value:
-                        widget.set_date(value)
-                elif isinstance(widget, ttk.Combobox):
-                    widget.set(value)
-                else:
-                    widget.delete(0, tk.END)
-                    widget.insert(0, value)
-
-    def get_id_from_name(self, name: str, data_dict: dict) -> int | None:
-        """名前からIDを取得（辞書型で）"""
-        for item_id, item_name in data_dict.items():
-            if item_name == name:
-                return item_id
-        return None
-
-    def get_name_from_id(self, id: int, data_dict: dict) -> str:
-        """IDから名前を取得（辞書型で）"""
-        return data_dict.get(id, "")
-
-    
-    def _display_attached_pdfs(self):
-        """repair_id に紐づく PDF 一覧を表示する"""
-        if not self.repair_id:
-            return
-
+    # ========= データ読み込み =========
+    def load_repair_data(self, repair_id):
+        """DBから修理情報を読み込みウィジェットに反映"""
         try:
             with sqlite3.connect(self.db_name) as conn:
-                cur = conn.cursor()
-                cur.execute("""
-                    SELECT name, doc_url FROM repair_document
-                    WHERE doc_repair_id = ?
-                """, (self.repair_id,))
-                pdfs = cur.fetchall()
-                
-            for i, (name, url) in enumerate(pdfs):
-                label = tk.Label(self.pdf_frame, text=name, fg="blue", cursor="hand2", anchor="w", wraplength=400)
-                label.grid(row=i, column=0, sticky="w")
-                label.bind("<Button-1>", lambda e, path=url: self._open_pdf(path))
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT repair_status_id, request_date, complete_date, repair_type_id, vendor_id,
+                           technician, details, remarks
+                    FROM repair_info WHERE id = ?
+                """, (repair_id,))
+                data = cursor.fetchone()
+
+            if not data:
+                messagebox.showerror("エラー", "修理情報が見つかりません。")
+                return
+
+            keys = ["状態", "依頼日", "完了日", "対応", "業者", "技術者", "詳細", "備考"]
+            for key, value in zip(keys, data):
+                self.set_widget_value(self.entries[key], self.get_name_from_id(value, key))
 
         except Exception as e:
-            messagebox.showerror("PDF表示エラー", f"PDF一覧の取得中にエラーが発生:\n{e}")
-    
-    def _attach_pdf(self):
-        """PDF を添付して DB に登録する"""
+            messagebox.showerror("読込エラー", f"修理情報読込中にエラーが発生しました:\n{e}")
+
+    # ========= ID・名称変換 =========
+    def get_name_from_id(self, id_value, key):
+        mapping = {
+            "状態": self.statuses,
+            "対応": self.types,
+            "業者": self.vendors
+        }
+        if key in mapping:
+            return mapping[key].get(id_value, "")
+        return id_value or ""
+
+    def get_id_from_name(self, name, mapping):
+        for id, nm in mapping.items():
+            if nm == name:
+                return id
+        return None
+
+    # ========= 保存処理 =========
+    def save_changes(self):
+        """修理情報の保存（新規 or 更新）"""
+        try:
+            new_values = {k: self.get_widget_value(w) for k, w in self.entries.items()}
+            repairstatus_id = self.get_id_from_name(new_values["状態"], self.statuses)
+            repairtype_id = self.get_id_from_name(new_values["対応"], self.types)
+            vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
+
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+
+                if self.repair_id:  # 更新
+                    cursor.execute("""
+                        UPDATE repair_info
+                        SET repair_status_id=?, request_date=?, complete_date=?,
+                            repair_type_id=?, vendor_id=?, technician=?, details=?, remarks=?
+                        WHERE id=?
+                    """, (
+                        repairstatus_id, new_values["依頼日"], new_values["完了日"],
+                        repairtype_id, vendor_id, new_values["技術者"],
+                        new_values["詳細"], new_values["備考"], self.repair_id
+                    ))
+                else:  # 新規登録
+                    cursor.execute("""
+                        INSERT INTO repair_info
+                        (equipment_code, repair_status_id, request_date, complete_date,
+                         repair_type_id, vendor_id, technician, details, remarks)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        self.equipment_code, repairstatus_id, new_values["依頼日"], new_values["完了日"],
+                        repairtype_id, vendor_id, new_values["技術者"],
+                        new_values["詳細"], new_values["備考"]
+                    ))
+                    self.repair_id = cursor.lastrowid
+
+                conn.commit()
+
+            messagebox.showinfo("保存完了", "修理情報を保存しました。")
+            if self.refresh_callback:
+                self.refresh_callback()
+            self.destroy()
+
+        except Exception as e:
+            messagebox.showerror("保存エラー", f"修理情報保存中にエラーが発生しました:\n{e}")
+
+    # ========= PDF添付 =========
+    def attach_pdf(self):
+        """修理情報にPDFファイルを添付"""
         if not self.repair_id:
-            messagebox.showwarning("警告", "修理情報を保存してから PDF を添付してください。")
+            messagebox.showwarning("注意", "PDFを添付するには、先に修理情報を保存してください。")
             return
 
         file_path = filedialog.askopenfilename(
             title="PDFファイルを選択",
-            filetypes=[("PDF files", "*.pdf")]
+            filetypes=[("PDFファイル", "*.pdf")]
         )
         if not file_path:
-            return  # キャンセルされた場合
+            return
 
         try:
-            # --- ユーザーに新しい名前を入力させる ---
-            base_name = os.path.splitext(os.path.basename(file_path))[0]
-            new_name = simpledialog.askstring(
-                "ファイル名入力",
-                f"保存するファイル名を入力してください（拡張子不要）\n元: {base_name}",
-                initialvalue=base_name
-            )
-
-            if not new_name:  # キャンセル or 空欄
-                new_name = base_name
-
-            # 保存先フォルダ（アプリ直下）
-            save_dir = os.path.join(os.getcwd(), "pdf_docs")
+            save_dir = os.path.join("attached_pdfs", str(self.repair_id))
             os.makedirs(save_dir, exist_ok=True)
-
-            # repair_id + 入力名で保存
-            filename = f"{self.repair_id}_{new_name}.pdf"
-            dest_path = os.path.join(save_dir, filename)
-
-            # PDF をコピー
-            shutil.copy(file_path, dest_path)
-
-            # DB に登録
-            with sqlite3.connect(self.db_name) as conn:
-                cur = conn.cursor()
-                cur.execute("""
-                    INSERT INTO repair_document (doc_repair_id, name, doc_url)
-                    VALUES (?, ?, ?)
-                """, (self.repair_id, filename, dest_path))
-                conn.commit()
-
-            messagebox.showinfo("完了", f"PDFを添付しました。\n保存名: {filename}")
-            self._refresh_pdf_list()
-
-            # 添付後にウィンドウを前面に戻す
-            self.lift()
-            self.focus_force()
-
+            shutil.copy(file_path, save_dir)
+            messagebox.showinfo("完了", f"PDFを添付しました。\n{save_dir}")
         except Exception as e:
-            messagebox.showerror("エラー", f"PDF添付中にエラーが発生しました:\n{e}")
-
-    def _refresh_pdf_list(self):
-        """PDF一覧を再表示（添付後用）"""
-        for widget in self.pdf_frame.winfo_children():
-            widget.destroy()
-        self._display_attached_pdfs()
-
-    def _open_pdf(self, path):
-        """クリックでPDFを開く"""
-        if not os.path.exists(path):
-            messagebox.showwarning("ファイルなし", f"{path} が存在しません。")
-            return
-        try:
-            if os.name == "nt":  # Windows
-                os.startfile(path)
-            elif os.name == "posix":
-                subprocess.run(["xdg-open", path])
-            else:
-                messagebox.showinfo("未対応", "PDFの自動オープンはこのOSでは未対応です。")
-        except Exception as e:
-            messagebox.showerror("エラー", f"PDFの表示中にエラーが発生しました：\n{e}")
-
-    # --- save_changes ----------
-    def save_changes(self, continue_pdf=False):
-        """
-        修理情報を保存する。
-        continue_pdf=True の場合、ウィンドウを閉じずにPDF添付を続ける。
-        """
-        new_values = {k: e.get() for k, e in self.entries.items()}
-
-        repairstatus_id = self.get_id_from_name(new_values["状態"], self.repairstatuses)
-        type_id = self.get_id_from_name(new_values["対応"], self.types)
-        vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
-
-        if None in (repairstatus_id, type_id, vendor_id):
-            messagebox.showerror("エラー", "マスタの選択値が不正です。")
-            return
-
-        try:
-            with sqlite3.connect(self.db_name) as conn:
-                cur = conn.cursor()
-
-                if self.new_mode:
-                    # ★ 新規追加：id を MAX(id)+1 で採番
-                    cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM repair")
-                    new_id = cur.fetchone()[0]
-
-                    cur.execute("""
-                        INSERT INTO repair
-                        (id, equipment_code, repairstatuses, request_date, completion_date,
-                        repairtype, vendor, technician, details, remarks)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        new_id,
-                        self.equipment_code,
-                        repairstatus_id,
-                        new_values["依頼日"],
-                        new_values["完了日"],
-                        type_id,
-                        vendor_id,
-                        new_values["技術者"],
-                        new_values["詳細"],
-                        new_values.get("備考", "")
-                    ))
-                    self.repair_id = new_id   # ← 保存後に repair_id 更新
-                    self.new_mode = False     # ← 新規→既存モードに切替
-                else:
-                    # 既存更新
-                    cur.execute("""
-                        UPDATE repair
-                        SET repairstatuses=?, request_date=?, completion_date=?,
-                            repairtype=?, vendor=?, technician=?, details=?, remarks=?
-                        WHERE id=?
-                    """, (
-                        repairstatus_id,
-                        new_values["依頼日"],
-                        new_values["完了日"],
-                        type_id,
-                        vendor_id,
-                        new_values["技術者"],
-                        new_values["詳細"],
-                        new_values.get("備考", ""),
-                        self.repair_id
-                    ))
-
-                conn.commit()
-
-            msg = "修理情報を追加しました。" if self.new_mode else "修理情報を更新しました。"
-            messagebox.showinfo("完了", msg)
-
-            if self.refresh_callback:
-                self.refresh_callback()
-
-            if continue_pdf:
-                # 保存後にPDF添付モード継続
-                btn_frame = self.children.get('!frame')  # create_widgets内のbtn_frame
-                if btn_frame:
-                    self.pdf_attach_button = tk.Button(btn_frame, text="PDF添付", command=self._attach_pdf)
-                    self.pdf_attach_button.pack(side=tk.LEFT, padx=5)
-                #PDDF添付を実行
-                self._attach_pdf()
-                self.lift()
-                self.focus_force()                
-            else:
-                # 通常保存時は閉じる
-                self.destroy()
-            
-
-        except Exception as e:
-            messagebox.showerror("DBエラー", str(e))
-        
+            messagebox.showerror("添付エラー", f"PDF添付中にエラーが発生しました:\n{e}")

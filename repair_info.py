@@ -22,6 +22,7 @@ class RepairInfoWindow(tk.Toplevel):
     with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
     DB_NAME = config.get("db_name", "default.db")  # デフォルト値を設定
+    
 
     FORM_CONFIG = [
         ("カテゴリ名", "categorie_name"), ("器材番号", "equipment_code"),
