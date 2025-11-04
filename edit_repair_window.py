@@ -23,9 +23,9 @@ class EditRepairWindow(tk.Toplevel):
         self.entries = {}
 
         # === マスター取得 ===
-        self.statuses = self.fetch_master("repair_status_master")
+        self.statuses = self.fetch_master("repair_statuse_master")
         self.types = self.fetch_master("repair_type_master")
-        self.vendors = self.fetch_master("vendor_master")
+        self.vendors = self.fetch_master("celler_master")
 
         self._create_widgets()
 
@@ -141,9 +141,9 @@ class EditRepairWindow(tk.Toplevel):
             with sqlite3.connect(self.db_name) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT repair_status_id, request_date, complete_date, repair_type_id, vendor_id,
+                    SELECT repairstatuses, request_date, completion_date, repairtype, vendor,
                            technician, details, remarks
-                    FROM repair_info WHERE id = ?
+                    FROM repair WHERE id = ?
                 """, (repair_id,))
                 data = cursor.fetchone()
 
@@ -189,9 +189,9 @@ class EditRepairWindow(tk.Toplevel):
 
                 if self.repair_id:  # 更新
                     cursor.execute("""
-                        UPDATE repair_info
-                        SET repair_status_id=?, request_date=?, complete_date=?,
-                            repair_type_id=?, vendor_id=?, technician=?, details=?, remarks=?
+                        UPDATE repair
+                        SET repairstatuses=?, request_date=?, completion_date=?,
+                            repairtype=?, vendor_id=?, technician=?, details=?, remarks=?
                         WHERE id=?
                     """, (
                         repairstatus_id, new_values["依頼日"], new_values["完了日"],
@@ -200,9 +200,9 @@ class EditRepairWindow(tk.Toplevel):
                     ))
                 else:  # 新規登録
                     cursor.execute("""
-                        INSERT INTO repair_info
+                        INSERT INTO repair
                         (equipment_code, repair_status_id, request_date, complete_date,
-                         repair_type_id, vendor_id, technician, details, remarks)
+                         repairtype, vendor_id, technician, details, remarks)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         self.equipment_code, repairstatus_id, new_values["依頼日"], new_values["完了日"],
