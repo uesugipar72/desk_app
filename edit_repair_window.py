@@ -6,6 +6,7 @@ from tkinter import ttk, messagebox, filedialog
 from tkcalendar import DateEntry
 from nullable_date_entry import NullableDateEntry
 from datetime import datetime
+from tkinter import simpledialog
 
 
 class EditRepairWindow(tk.Toplevel):
@@ -97,11 +98,8 @@ class EditRepairWindow(tk.Toplevel):
             entry.grid(row=i, column=1, padx=5, pady=3, sticky="w")
             self.entries[label] = entry
 
-        # ボタン群
-        frame_btn = tk.Frame(self)
-        frame_btn.pack(pady=10)
-        tk.Button(frame_btn, text="保存", command=self.save_changes).pack(side="left", padx=10)
-        tk.Button(frame_btn, text="PDF添付", command=self.attach_pdf).pack(side="left", padx=10)
+        # --- ボタン群を別メソッドで作成 ---
+        self._create_buttons()
 
         # === PDF一覧 ===
         frame_pdf = tk.LabelFrame(self, text="添付PDF一覧")
@@ -110,6 +108,24 @@ class EditRepairWindow(tk.Toplevel):
         self.pdf_listbox = tk.Listbox(frame_pdf, height=6)
         self.pdf_listbox.pack(fill="both", expand=True, padx=5, pady=5)
         self.pdf_listbox.bind("<Double-Button-1>", self.open_selected_pdf)
+
+    def _create_buttons(self):
+        """保存・PDF添付・戻るボタン群を作成"""
+        frame_btn = tk.Frame(self)
+        frame_btn.pack(pady=10)
+
+        btn_save = tk.Button(frame_btn, text="保存", width=12, command=self.save_changes)
+        btn_pdf = tk.Button(frame_btn, text="PDF添付", width=12, command=self.attach_pdf)
+        btn_cancel = tk.Button(frame_btn, text="保存せずに戻る", width=15, command=self.cancel_and_close)
+
+        btn_save.pack(side="left", padx=10)
+        btn_pdf.pack(side="left", padx=10)
+        btn_cancel.pack(side="left", padx=10)
+
+    def cancel_and_close(self):
+        """保存せずに閉じる"""
+        if messagebox.askyesno("確認", "変更を保存せずに閉じますか？"):
+            self.destroy()
 
     # ========= 修理情報の読込 =========
     def load_repair_data(self, repair_id):
@@ -176,31 +192,116 @@ class EditRepairWindow(tk.Toplevel):
             self.destroy()
         except Exception as e:
             messagebox.showerror("保存エラー", f"修理情報保存中にエラーが発生しました:\n{e}")
+    
+    def save_changes_without_close(self):
+        """修理情報を保存するがウィンドウを閉じない（PDF添付用）"""
+        try:
+            new_values = {k: self.get_widget_value(w) for k, w in self.entries.items()}
+            repairstatus_id = self.get_id_from_name(new_values["状態"], self.statuses)
+            repairtype_id = self.get_id_from_name(new_values["対応"], self.types)
+            vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
+
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+
+                if self.repair_id:  # 既存修理データを更新
+                    cursor.execute("""
+                        UPDATE repair
+                        SET repairstatuses=?, request_date=?, completion_date=?,
+                            repairtype=?, vendor=?, technician=?, details=?, remarks=?
+                        WHERE id=?
+                    """, (
+                        repairstatus_id, new_values["依頼日"], new_values["完了日"],
+                        repairtype_id, vendor_id, new_values["技術者"],
+                        new_values["詳細"], new_values["備考"], self.repair_id
+                    ))
+                else:  # 新規修理データを追加
+                    cursor.execute("""
+                        INSERT INTO repair
+                        (equipment_code, repairstatuses, request_date, completion_date,
+                         repairtype, vendor, technician, details, remarks)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        self.equipment_code, repairstatus_id, new_values["依頼日"], new_values["完了日"],
+                        repairtype_id, vendor_id, new_values["技術者"],
+                        new_values["詳細"], new_values["備考"]
+                    ))
+                    self.repair_id = cursor.lastrowid
+
+                conn.commit()
+
+            # ウィンドウは閉じず、リロードのみ行う
+            if self.refresh_callback:
+                self.refresh_callback()
+
+        except Exception as e:
+            messagebox.showerror("保存エラー", f"修理情報保存中にエラーが発生しました:\n{e}")
+
 
     # ========= PDF添付 =========
     def attach_pdf(self):
-        """PDFファイル添付（保存＋リスト更新）"""
-        if not self.repair_id:
-            messagebox.showwarning("注意", "PDFを添付するには、先に修理情報を保存してください。")
+        """PDFファイル添付（保存＋データ更新＋リスト更新）"""
+        # まず現在の編集内容を保存
+        try:
+            self.save_changes_without_close()
+        except Exception as e:
+            messagebox.showerror("保存エラー", f"保存中にエラーが発生しました:\n{e}")
             return
 
-        file_path = filedialog.askopenfilename(title="PDFを選択", filetypes=[("PDFファイル", "*.pdf")])
+        if not self.repair_id:
+            messagebox.showwarning("注意", "PDFを添付するには、修理情報を先に保存してください。")
+            return
+
+        # ファイル選択
+        file_path = filedialog.askopenfilename(
+            title="PDFを選択", filetypes=[("PDFファイル", "*.pdf")]
+        )
         if not file_path:
             return
+        
+        # === ファイル名入力 ===
+        default_name = os.path.basename(file_path)
+        new_name = simpledialog.askstring(
+            "ファイル名入力",
+            f"保存するPDFファイル名を入力してください（拡張子 .pdf は自動で付きます）:",
+            initialvalue=os.path.splitext(default_name)[0],
+            parent=self
+        )
+
+        if not new_name:  # キャンセルされた場合
+            return
+
+        # 拡張子付ける
+        if not new_name.lower().endswith(".pdf"):
+            new_name += ".pdf"
+
 
         try:
+            # 添付先ディレクトリ
             save_dir = os.path.join("attached_pdfs", str(self.repair_id))
             os.makedirs(save_dir, exist_ok=True)
-            file_name = os.path.basename(file_path)
-            save_path = os.path.join(save_dir, file_name)
+
+            # 保存パス
+            save_path = os.path.join(save_dir, new_name)
+
+            # ファイルコピー
             shutil.copy(file_path, save_path)
 
             messagebox.showinfo("完了", f"PDFを添付しました。\n{save_path}")
 
-            # === リスト更新 ===
+            # === PDFリスト再読み込み ===
             self.load_pdf_list()
+
+            # === 修理データ再読込（更新反映） ===
+            self.load_repair_data(self.repair_id)
+
+            # ウィンドウを前面に
+            self.lift()
+            self.focus_force()
+
         except Exception as e:
             messagebox.showerror("添付エラー", f"PDF添付中にエラーが発生しました:\n{e}")
+
 
     # ========= PDF一覧読込 =========
     def load_pdf_list(self):
