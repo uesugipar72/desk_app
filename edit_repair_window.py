@@ -124,8 +124,8 @@ class EditRepairWindow(tk.Toplevel):
 
     def cancel_and_close(self):
         """保存せずに閉じる"""
-        if messagebox.askyesno("確認", "変更を保存せずに閉じますか？"):
-            self.destroy()
+        #if messagebox.askyesno("確認", "変更を保存せずに閉じますか？"):
+        self.destroy()
 
     # ========= 修理情報の読込 =========
     def load_repair_data(self, repair_id):
