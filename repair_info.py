@@ -135,7 +135,7 @@ class RepairInfoWindow(tk.Toplevel):
             # デフォルトは左寄せ
             anchor = "center"
             # 完了日だけ中央寄せ
-            if col_id == ("details","remarks"):
+            if col_id in ("details", "remarks"):
                 anchor = "w"
 
             self.repair_tree.column(
