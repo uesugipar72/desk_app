@@ -8,5 +8,7 @@ __pycache__/
 *.xls
 # pdfファイルを無視
 *.pdf
+.vs/
+
 
 
