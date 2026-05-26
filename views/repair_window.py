@@ -1,185 +1,331 @@
+import os
+import shutil
 import tkinter as tk
-from tkinter import ttk, messagebox
-import tkinter.font as tkFont
+from tkinter import ttk, messagebox, filedialog
+from tkcalendar import DateEntry
+from datetime import datetime
+from tkinter import simpledialog
 
-# 作成したModel層から必要なクラスをインポート
+# Model層から必要なクラスをインポート
 from models.master_model import MasterModel
 from models.repair_model import RepairModel
 
-# ※修理情報を登録・編集する画面（別ウィンドウ）を同じviewsフォルダからインポートする想定
-# (既存のファイルを再利用する場合は、配置パスに合わせて書き換えてください)
-# from views.edit_repair_window import EditRepairWindow
 
-
-class RepairInfoWindow(tk.Toplevel):
+class NullableDateEntry(DateEntry):
     """
-    特定の機器に紐づく詳細情報と、これまでの修理履歴一覧を表示・管理する画面。
-    メイン画面から Toplevel (サブウィンドウ) として呼び出されます。
+    空白を許容し、日付が未設定でも使える DateEntry 拡張クラス。
+    - 空欄で初期化・表示が可能
+    - 手入力で日付を削除可能
+    - 無効な日付は赤文字で警告
     """
+    def __init__(self, master=None, **kwargs):
+        self._date_pattern = kwargs.get("date_pattern", "yyyy-mm-dd")
+        self._default_fg = kwargs.get("foreground", "black")
 
-    # 上部エリアに表示する機器情報の項目定義 (画面のラベル名, 辞書のキー名)
-    FORM_CONFIG = [
-        ("機器分類", "categorie_name"), ("器材番号", "equipment_code"),
-        ("機器名", "name"), ("状態", "status_name"), ("部門", "department_name"),
-        ("部屋", "room_name"), ("製造元", "manufacturer_name"), ("販売元", "celler_name"),
-        ("備考", "remarks"), ("購入日", "purchase_date"), ("モデル(シリアル)", "model")
-    ]
+        super().__init__(master, **kwargs)
 
-    def __init__(self, parent, equipment_code: str):
+        self._var = self["textvariable"] or tk.StringVar()
+        self.configure(textvariable=self._var)
+        self._var.trace_add("write", self._on_write)
+
+    def _on_write(self, *args):
+        value = self._var.get().strip()
+        if not value:
+            self.configure(foreground=self._default_fg)
+            return
+        try:
+            datetime.strptime(value, self._date_pattern.replace("yyyy", "%Y").replace("mm", "%m").replace("dd", "%d"))
+            self.configure(foreground=self._default_fg)
+        except ValueError:
+            self.configure(foreground="red")
+
+    def get(self):
+        value = super().get().strip()
+        return "" if not value else value
+
+    def set_date(self, value):
+        if not value:
+            self.delete(0, tk.END)
+        else:
+            super().set_date(value)
+
+
+class EditRepairWindow(tk.Toplevel):
+    FIELD_LABELS = ["状態", "依頼日", "完了日", "対応", "業者", "技術者", "詳細", "備考"]
+
+    def __init__(self, parent, db_name, equipment_code=None, repair_id=None, refresh_callback=None):
         super().__init__(parent)
-        self.parent = parent
-        self.equipment_code = equipment_code
+        self.title("修理情報 編集ウィンドウ")
+        self.geometry("650x600")
 
-        self.title(f"修理履歴管理 - 器材番号: {self.equipment_code}")
-        self.geometry("1000x650")
-        
-        # モーダルウィンドウ（この画面を閉じるまでメイン画面を操作できない）にする設定
+        self.db_name = db_name
+        self.equipment_code = equipment_code
+        self.repair_id = repair_id
+        self.refresh_callback = refresh_callback
+        self.entries = {}
+
+        # モーダルに設定（親画面の操作をロック）
         self.grab_set()
 
+        # === マスター取得 ===
+        self.statuses = MasterModel.get_kv_lookup("repair_statuse_master")
+        self.types = MasterModel.get_kv_lookup("repair_type_master")
+        self.vendors = MasterModel.get_kv_lookup("celler_master")
+
+        # === 画面構築 ===
         self._create_widgets()
-        
-        # データを読み込んで画面に反映
-        self.load_equipment_detail()
-        self.refresh_repair_history()
 
+        if self.repair_id:
+            self.load_repair_data(self.repair_id)
+            self.load_pdf_list()
+        else:
+            # 新規登録時は依頼日に今日の日付をデフォルトセット
+            self.set_widget_value(self.entries["依頼日"], datetime.now().strftime("%Y-%m-%d"))
+
+    # ========= 共通関数 =========
+    def get_widget_value(self, widget):
+        if isinstance(widget, ttk.Combobox):
+            return widget.get().strip()
+        elif isinstance(widget, tk.Text):
+            return widget.get("1.0", "end-1c").strip()
+        elif isinstance(widget, (tk.Entry, NullableDateEntry, DateEntry)):
+            return widget.get().strip()
+        return ""
+
+    def set_widget_value(self, widget, value):
+        if isinstance(widget, (DateEntry, NullableDateEntry)):
+            try:
+                if value:
+                    widget.set_date(value)
+                else:
+                    widget.delete(0, tk.END)
+            except:
+                try:
+                    widget.delete(0, tk.END)
+                except:
+                    pass
+        elif isinstance(widget, ttk.Combobox):
+            widget.set(value)
+        elif isinstance(widget, tk.Text):
+            widget.delete("1.0", tk.END)
+            widget.insert("1.0", value)
+        else:
+            widget.delete(0, tk.END)
+            widget.insert(0, value)
+
+    # ========= ウィジェット作成 =========
     def _create_widgets(self):
-        """画面ウィジェットの配置"""
-        # 1. 機器の基本情報表示エリア (上部)
-        frame_info = ttk.LabelFrame(self, text="機器基本情報", padding=10)
-        frame_info.pack(fill="x", padx=10, pady=5)
+        frame_top = tk.Frame(self)
+        frame_top.pack(pady=10)
 
-        self.info_labels = {}
-        for i, (label_text, key) in enumerate(self.FORM_CONFIG):
-            row = i // 4
-            col = (i % 4) * 2
+        for i, label in enumerate(self.FIELD_LABELS):
+            tk.Label(frame_top, text=label).grid(row=i, column=0, padx=5, pady=3, sticky="e")
+
+            # 提案いただいた NullableDateEntry を依頼日・完了日の両方に適応！
+            if "日" in label:
+                entry = NullableDateEntry(frame_top, date_pattern="yyyy-mm-dd", width=38)
+            elif label == "対応":
+                entry = ttk.Combobox(frame_top, values=list(self.types.values()), state="readonly", width=37)
+            elif label == "状態":
+                entry = ttk.Combobox(frame_top, values=list(self.statuses.values()), state="readonly", width=37)
+            elif label == "業者":
+                entry = ttk.Combobox(frame_top, values=list(self.vendors.values()), state="readonly", width=37)
+            elif label in ("詳細", "備考"):
+                entry = tk.Text(frame_top, width=40, height=3)
+            else:
+                entry = tk.Entry(frame_top, width=40)
+
+            entry.grid(row=i, column=1, padx=5, pady=3, sticky="w")
+            self.entries[label] = entry
+
+        # --- ボタン群を作成 ---
+        self._create_buttons()
+
+        # === PDF一覧 ===
+        frame_pdf = tk.LabelFrame(self, text="添付PDF一覧")
+        frame_pdf.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.pdf_listbox = tk.Listbox(frame_pdf, height=6)
+        self.pdf_listbox.pack(fill="both", expand=True, padx=5, pady=5)
+        self.pdf_listbox.bind("<Double-Button-1>", self.open_selected_pdf)
+
+    def _create_buttons(self):
+        frame_btn = tk.Frame(self)
+        frame_btn.pack(pady=10)
+
+        btn_save = tk.Button(frame_btn, text="保存", width=12, command=self.save_changes)
+        btn_pdf = tk.Button(frame_btn, text="PDF添付", width=12, command=self.attach_pdf)
+        btn_cancel = tk.Button(frame_btn, text="保存せずに戻る", width=15, command=self.cancel_and_close)
+
+        btn_save.pack(side="left", padx=10)
+        btn_pdf.pack(side="left", padx=10)
+        btn_cancel.pack(side="left", padx=10)
+
+    def cancel_and_close(self):
+        self.destroy()
+
+    # ========= 修理情報の読込 =========
+    def load_repair_data(self, repair_id):
+        try:
+            import sqlite3
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT repairstatuses, request_date, completion_date, repairtype, vendor,
+                           technician, details, remarks
+                    FROM repair WHERE id = ?
+                """, (repair_id,))
+                data = cursor.fetchone()
+
+            if not data:
+                messagebox.showerror("エラー", "修理情報が見つかりません。")
+                return
+
+            keys = ["状態", "依頼日", "完了日", "対応", "業者", "技術者", "詳細", "備考"]
+            for key, value in zip(keys, data):
+                self.set_widget_value(self.entries[key], self.get_name_from_id(value, key))
+        except Exception as e:
+            messagebox.showerror("読込エラー", f"修理情報読込中にエラーが発生しました:\n{e}")
+
+    # ========= 保存処理の実体 =========
+    def execute_db_save(self):
+        new_values = {k: self.get_widget_value(w) for k, w in self.entries.items()}
+        repairstatus_id = self.get_id_from_name(new_values["状態"], self.statuses)
+        repairtype_id = self.get_id_from_name(new_values["対応"], self.types)
+        vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
+
+        # 「依頼日」に入力された文字が赤く反転している(不正入力)状態、または未入力の時は弾く
+        if self.entries["依頼日"].cget("foreground") == "red" or not new_values["依頼日"]:
+            messagebox.showwarning("入力チェック", "「依頼日」が正しく入力されていません。")
+            raise ValueError("不正な日付")
             
-            lbl_title = ttk.Label(frame_info, text=f"{label_text}:", font=("Helvetica", 9, "bold"))
-            lbl_title.grid(row=row, column=col, padx=5, pady=5, sticky="e")
-            
-            # 値を表示するためのラベル (読み取り専用)
-            lbl_value = ttk.Label(frame_info, text="", background="#f0f0f0", width=20, anchor="w", padding=2)
-            lbl_value.grid(row=row, column=col+1, padx=5, pady=5, sticky="w")
-            self.info_labels[key] = lbl_value
+        if self.entries["完了日"].get() and self.entries["完了日"].cget("foreground") == "red":
+            messagebox.showwarning("入力チェック", "「完了日」の形式が正しくありません。")
+            raise ValueError("不正な日付")
 
-        # 2. 修理履歴一覧エリア (下部)
-        frame_history = ttk.LabelFrame(self, text="修理・保守履歴", padding=10)
-        frame_history.pack(fill="both", expand=True, padx=10, pady=5)
+        if not (repairstatus_id and repairtype_id and vendor_id):
+            messagebox.showwarning("入力チェック", "「状態」「対応」「業者」は必須項目です。")
+            raise ValueError("必須項目未入力")
 
-        # 履歴操作用ボタン
-        frame_btns = ttk.Frame(frame_history)
-        frame_btns.pack(fill="x", pady=5)
+        import sqlite3
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            if self.repair_id:
+                cursor.execute("""
+                    UPDATE repair
+                    SET repairstatuses=?, request_date=?, completion_date=?,
+                        repairtype=?, vendor=?, technician=?, details=?, remarks=?
+                    WHERE id=?
+                """, (
+                    repairstatus_id, new_values["依頼日"], new_values["完了日"] if new_values["完了日"] else None,
+                    repairtype_id, vendor_id, new_values["技術者"] if new_values["技術者"] else None,
+                    new_values["詳細"] if new_values["詳細"] else None, new_values["備考"] if new_values["備考"] else None, self.repair_id
+                ))
+            else:
+                cursor.execute("""
+                    INSERT INTO repair
+                    (equipment_code, repairstatuses, request_date, completion_date,
+                     repairtype, vendor, technician, details, remarks)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    self.equipment_code, repairstatus_id, new_values["依頼日"], new_values["完了日"] if new_values["完了日"] else None,
+                    repairtype_id, vendor_id, new_values["技術者"] if new_values["技術者"] else None,
+                    new_values["詳細"] if new_values["詳細"] else None, new_values["備考"] if new_values["備考"] else None
+                ))
+                self.repair_id = cursor.lastrowid
+            conn.commit()
 
-        btn_add = ttk.Button(frame_btns, text="修理履歴の追加", command=self._open_add_repair)
-        btn_add.pack(side="left", padx=5)
-
-        btn_edit = ttk.Button(frame_btns, text="選択した履歴の修正", command=self._open_edit_repair)
-        btn_edit.pack(side="left", padx=5)
-
-        btn_refresh = ttk.Button(frame_btns, text="履歴の更新", command=self.refresh_repair_history)
-        btn_refresh.pack(side="right", padx=5)
-
-        # Treeview（履歴の一覧表）
-        columns = ("status", "req_date", "comp_date", "type", "vendor", "technician", "details", "remarks")
-        self.repair_tree = ttk.Treeview(frame_history, columns=columns, show="headings")
-        
-        # 列ヘッダーの定義
-        headers = {
-            "status": "修理状態", "req_date": "依頼日", "comp_date": "完了日",
-            "type": "修理種別", "vendor": "業者名", "technician": "対応技術者",
-            "details": "修理詳細内容", "remarks": "備考"
-        }
-        for col, text in headers.items():
-            self.repair_tree.heading(col, text=text)
-            self.repair_tree.column(col, width=110, anchor="w" if col in ["details", "remarks"] else "center")
-
-        # スクロールバー
-        vsb = ttk.Scrollbar(frame_history, orient="vertical", command=self.repair_tree.yview)
-        hsb = ttk.Scrollbar(frame_history, orient="horizontal", command=self.repair_tree.xview)
-        self.repair_tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-
-        self.repair_tree.pack(side="top", fill="both", expand=True)
-        vsb.pack(side="right", fill="y", before=self.repair_tree)
-        hsb.pack(side="bottom", fill="x")
-
-
-        # ---------------------------------------------------------
-        # 【追加】行の背景色の色付けルール（タグ）を定義
-        # ---------------------------------------------------------
-        self.repair_tree.tag_configure("requesting", background="#ffcccc")  # 薄い赤 (依頼中など)
-        self.repair_tree.tag_configure("completed", background="#e6f2ff")   # 薄い青 (完了)
-        self.repair_tree.tag_configure("impossible", background="#d3d3d3")  # 薄いグレー (修理不能・廃棄)
-
-
-
-    def load_equipment_detail(self):
-        """Modelから機器の最新詳細情報を取得し、画面上部のラベルにセットする"""
-        # SQLを使わず、辞書形式で整形されたデータを1行で取得
-        detail = RepairModel.get_equipment_detail_by_code(self.equipment_code)
-        
-        if not detail:
-            messagebox.showerror("エラー", "指定された機器の情報が見つかりませんでした。")
+    def save_changes(self):
+        try:
+            self.execute_db_save()
+            messagebox.showinfo("保存完了", "修理情報を保存しました。")
+            if self.refresh_callback:
+                self.refresh_callback()
             self.destroy()
-            return
-
-        # ラベルに値を反映
-        for key, label_widget in self.info_labels.items():
-            val = detail.get(key, "")
-            label_widget.config(text=str(val) if val is not None else "")
-
-    def refresh_repair_history(self):
-        """Modelから修理履歴を取得し、Treeviewの表示を最新にする"""
-        # Treeviewの既存データをクリア
-        for item in self.repair_tree.get_children():
-            self.repair_tree.delete(item)
-
-        # Modelからマスタ名がLEFT JOIN結合済みの綺麗なレコードリストを取得
-        repairs = RepairModel.get_history_by_equipment(self.equipment_code)
-
-        for row in repairs:
-            # row: (id, status, request_date, completion_date, repair_type, vendor, technician, details, remarks)
-            # row[0] はレコードのID（非表示）、row[1:] が画面に渡すデータ
-            repair_id = row[0]
-            self.repair_tree.insert("", tk.END, iid=str(repair_id), values=row[1:])
-            # ---------------------------------------------------------
-            # 【追加】修理状態の文言に応じて割り当てるタグを判定
-            # ---------------------------------------------------------
-            tag = "normal"
-            if status_name in ["修理依頼中", "更新申請中"]:
-                tag = "requesting"
-            elif status_name == "修理完了":
-                tag = "completed"
-            elif status_name in ["修理不能", "廃棄"]:
-                tag = "impossible"
-
-            # tags 引数に判定したタグを渡してデータを挿入
-            self.repair_tree.insert("", tk.END, iid=str(repair_id), values=row[1:], tags=(tag,))
+        except ValueError:
+            pass
+        except Exception as e:
+            messagebox.showerror("保存エラー", f"修理情報保存中にエラーが発生しました:\n{e}")
     
-    def _open_add_repair(self):
-        """新規修理履歴の追加ウィンドウを開く"""
-        try:
-            # TODO: 今後 views/edit_repair_window.py を作成した際に連携させます
-            messagebox.showinfo("開発中", f"器材【{self.equipment_code}】の新規修理登録画面を開きます（次のステップで実装）")
-            
-            # 実装後の呼び出しイメージ:
-            # EditRepairWindow(parent=self, equipment_code=self.equipment_code, repair_id=None, callback=self.refresh_repair_history)
-        except Exception as e:
-            messagebox.showerror("例外発生", f"修理情報追加画面の起動中にエラーが発生しました:\n{e}")
+    def save_changes_without_close(self):
+        self.execute_db_save()
+        if self.refresh_callback:
+            self.refresh_callback()
 
-    def _open_edit_repair(self):
-        """選択された既存履歴の修正ウィンドウを開く"""
-        selected_ids = self.repair_tree.selection()
-        if not selected_ids:
-            messagebox.showwarning("選択なし", "修正する修理情報を選択してください。")
+    # ========= PDF添付 =========
+    def attach_pdf(self):
+        try:
+            self.save_changes_without_close()
+        except ValueError:
+            return
+        except Exception as e:
+            messagebox.showerror("保存エラー", f"保存中にエラーが発生しました:\n{e}")
             return
 
-        # Treeviewの iid に設定しておいた DBの repair_id を取得
-        repair_id = int(selected_ids[0])
+        if not self.repair_id:
+            messagebox.showwarning("注意", "PDFを添付するには、修理情報を先に保存してください。")
+            return
+
+        file_path = filedialog.askopenfilename(title="PDFを選択", filetypes=[("PDFファイル", "*.pdf")])
+        if not file_path:
+            return
         
+        default_name = os.path.basename(file_path)
+        new_name = simpledialog.askstring(
+            "ファイル名入力",
+            f"保存するPDFファイル名を入力してください（拡張子 .pdf は自動で付きます）:",
+            initialvalue=os.path.splitext(default_name)[0],
+            parent=self
+        )
+        if not new_name:
+            return
+
+        if not new_name.lower().endswith(".pdf"):
+            new_name += ".pdf"
+
         try:
-            # TODO: 今後 views/edit_repair_window.py を作成した際に連携させます
-            messagebox.showinfo("開発中", f"修理履歴ID【{repair_id}】の編集画面を開きます（次のステップで実装）")
-            
-            # 実装後の呼び出しイメージ:
-            # EditRepairWindow(parent=self, equipment_code=self.equipment_code, repair_id=repair_id, callback=self.refresh_repair_history)
+            save_dir = os.path.join("attached_pdfs", str(self.repair_id))
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, new_name)
+            shutil.copy(file_path, save_path)
+
+            messagebox.showinfo("完了", f"PDFを添付しました。\n{save_path}")
+            self.load_pdf_list()
+            self.load_repair_data(self.repair_id)
+
+            self.lift()
+            self.focus_force()
         except Exception as e:
-            messagebox.showerror("例外発生", f"修理情報修正画面の起動中にエラーが発生しました:\n{e}")
+            messagebox.showerror("添付エラー", f"PDF添付中にエラーが発生しました:\n{e}")
+
+    # ========= PDF一覧読込 =========
+    def load_pdf_list(self):
+        self.pdf_listbox.delete(0, tk.END)
+        pdf_dir = os.path.join("attached_pdfs", str(self.repair_id))
+        if os.path.exists(pdf_dir):
+            pdfs = [f for f in os.listdir(pdf_dir) if f.lower().endswith(".pdf")]
+            for pdf in pdfs:
+                self.pdf_listbox.insert(tk.END, pdf)
+
+    # ========= PDFダブルクリック開く =========
+    def open_selected_pdf(self, event=None):
+        selection = self.pdf_listbox.curselection()
+        if not selection:
+            return
+        file_name = self.pdf_listbox.get(selection[0])
+        pdf_path = os.path.join("attached_pdfs", str(self.repair_id), file_name)
+        try:
+            os.startfile(pdf_path)
+        except Exception as e:
+            messagebox.showerror("エラー", f"PDFを開けませんでした:\n{e}")
+
+    # ========= ID・名称変換 =========
+    def get_name_from_id(self, id_value, key):
+        mapping = {"状態": self.statuses, "対応": self.types, "業者": self.vendors}
+        return mapping.get(key, {}).get(id_value, id_value or "")
+
+    def get_id_from_name(self, name, mapping):
+        for id_, nm in mapping.items():
+            if nm == name:
+                return id_
+        return None
