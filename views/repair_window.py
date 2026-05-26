@@ -101,6 +101,16 @@ class RepairInfoWindow(tk.Toplevel):
         vsb.pack(side="right", fill="y", before=self.repair_tree)
         hsb.pack(side="bottom", fill="x")
 
+
+        # ---------------------------------------------------------
+        # 【追加】行の背景色の色付けルール（タグ）を定義
+        # ---------------------------------------------------------
+        self.repair_tree.tag_configure("requesting", background="#ffcccc")  # 薄い赤 (依頼中など)
+        self.repair_tree.tag_configure("completed", background="#e6f2ff")   # 薄い青 (完了)
+        self.repair_tree.tag_configure("impossible", background="#d3d3d3")  # 薄いグレー (修理不能・廃棄)
+
+
+
     def load_equipment_detail(self):
         """Modelから機器の最新詳細情報を取得し、画面上部のラベルにセットする"""
         # SQLを使わず、辞書形式で整形されたデータを1行で取得
@@ -130,7 +140,20 @@ class RepairInfoWindow(tk.Toplevel):
             # row[0] はレコードのID（非表示）、row[1:] が画面に渡すデータ
             repair_id = row[0]
             self.repair_tree.insert("", tk.END, iid=str(repair_id), values=row[1:])
+            # ---------------------------------------------------------
+            # 【追加】修理状態の文言に応じて割り当てるタグを判定
+            # ---------------------------------------------------------
+            tag = "normal"
+            if status_name in ["修理依頼中", "更新申請中"]:
+                tag = "requesting"
+            elif status_name == "修理完了":
+                tag = "completed"
+            elif status_name in ["修理不能", "廃棄"]:
+                tag = "impossible"
 
+            # tags 引数に判定したタグを渡してデータを挿入
+            self.repair_tree.insert("", tk.END, iid=str(repair_id), values=row[1:], tags=(tag,))
+    
     def _open_add_repair(self):
         """新規修理履歴の追加ウィンドウを開く"""
         try:

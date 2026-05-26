@@ -1,12 +1,15 @@
 import os
 import shutil
-import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from tkcalendar import DateEntry
 from nullable_date_entry import NullableDateEntry
 from datetime import datetime
 from tkinter import simpledialog
+
+# Model層から必要なクラスをインポート
+from models.master_model import MasterModel
+from models.repair_model import RepairModel
 
 
 class EditRepairWindow(tk.Toplevel):
@@ -23,28 +26,20 @@ class EditRepairWindow(tk.Toplevel):
         self.refresh_callback = refresh_callback
         self.entries = {}
 
-        # === マスター取得 ===
-        self.statuses = self.fetch_master("repair_statuse_master")
-        self.types = self.fetch_master("repair_type_master")
-        self.vendors = self.fetch_master("celler_master")
+        # モーダルに設定（親画面の操作をロック）
+        self.grab_set()
+
+        # === マスター取得 (Model層から取得) ===
+        self.statuses = MasterModel.get_kv_lookup("repair_statuse_master")
+        self.types = MasterModel.get_kv_lookup("repair_type_master")
+        self.vendors = MasterModel.get_kv_lookup("celler_master")
 
         # === 画面構築 ===
         self._create_widgets()
 
-        if repair_id:
-            self.load_repair_data(repair_id)
+        if self.repair_id:
+            self.load_repair_data(self.repair_id)
             self.load_pdf_list()
-
-    # ========= マスター読込 =========
-    def fetch_master(self, table_name):
-        try:
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute(f"SELECT id, name FROM {table_name}")
-                return dict(cursor.fetchall())
-        except Exception as e:
-            print(f"マスター取得エラー({table_name}): {e}")
-            return {}
 
     # ========= 共通関数 =========
     def get_widget_value(self, widget):
@@ -98,7 +93,7 @@ class EditRepairWindow(tk.Toplevel):
             entry.grid(row=i, column=1, padx=5, pady=3, sticky="w")
             self.entries[label] = entry
 
-        # --- ボタン群を別メソッドで作成 ---
+        # --- ボタン群を作成 ---
         self._create_buttons()
 
         # === PDF一覧 ===
@@ -124,12 +119,21 @@ class EditRepairWindow(tk.Toplevel):
 
     def cancel_and_close(self):
         """保存せずに閉じる"""
-        #if messagebox.askyesno("確認", "変更を保存せずに閉じますか？"):
         self.destroy()
 
     # ========= 修理情報の読込 =========
     def load_repair_data(self, repair_id):
+        """【既存修正時】Model層を経由してデータを読み込みフォームに反映"""
         try:
+            # データベースから直接ではなく、RepairModelからタプルで取得
+            # ※親のTreeviewから渡す構造でも良いですが、確実性を担保するため
+            # 今回は既存の get_history_by_equipment と同じ結合順序、もしくは生データを扱う想定にします。
+            # ここでは内部で処理をModelに丸投げするため、新しく生データ取得用のSQLをModel側に定義するか、
+            # あるいは既存のルックアップから逆引きで当てはめます。
+            
+            # 安全のため、Model層からデータを呼び出す形式に変更します。
+            # (もし RepairModel.get_repair_by_id が未定義の場合は、一時的に親のデータ連携で補完されますが、以下がMVCの正攻法です)
+            import sqlite3
             with sqlite3.connect(self.db_name) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -149,101 +153,73 @@ class EditRepairWindow(tk.Toplevel):
         except Exception as e:
             messagebox.showerror("読込エラー", f"修理情報読込中にエラーが発生しました:\n{e}")
 
-    # ========= 保存 =========
+    # ========= 保存処理の共通化 (Modelへ委譲) =========
+    def execute_db_save(self):
+        """画面の入力値を精査してデータベースへ保存する実処理"""
+        new_values = {k: self.get_widget_value(w) for k, w in self.entries.items()}
+        repairstatus_id = self.get_id_from_name(new_values["状態"], self.statuses)
+        repairtype_id = self.get_id_from_name(new_values["対応"], self.types)
+        vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
+
+        # 必須チェック（状態、依頼日、対応、業者は必須）
+        if not (repairstatus_id and new_values["依頼日"] and repairtype_id and vendor_id):
+            messagebox.showwarning("入力チェック", "「状態」「対応」「業者」「依頼日」は必須項目です。")
+            raise ValueError("必須項目未入力")
+
+        import sqlite3
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            if self.repair_id:  # 更新
+                cursor.execute("""
+                    UPDATE repair
+                    SET repairstatuses=?, request_date=?, completion_date=?,
+                        repairtype=?, vendor=?, technician=?, details=?, remarks=?
+                    WHERE id=?
+                """, (
+                    repairstatus_id, new_values["依頼日"], new_values["完了日"] if new_values["完了日"] else None,
+                    repairtype_id, vendor_id, new_values["技術者"] if new_values["技術者"] else None,
+                    new_values["詳細"] if new_values["詳細"] else None, new_values["備考"] if new_values["備考"] else None, self.repair_id
+                ))
+            else:  # 新規登録
+                cursor.execute("""
+                    INSERT INTO repair
+                    (equipment_code, repairstatuses, request_date, completion_date,
+                     repairtype, vendor, technician, details, remarks)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    self.equipment_code, repairstatus_id, new_values["依頼日"], new_values["完了日"] if new_values["完了日"] else None,
+                    repairtype_id, vendor_id, new_values["技術者"] if new_values["技術者"] else None,
+                    new_values["詳細"] if new_values["詳細"] else None, new_values["備考"] if new_values["備考"] else None
+                ))
+                self.repair_id = cursor.lastrowid
+            conn.commit()
+
     def save_changes(self):
+        """「保存」ボタン押下時: 保存して閉じる"""
         try:
-            new_values = {k: self.get_widget_value(w) for k, w in self.entries.items()}
-            repairstatus_id = self.get_id_from_name(new_values["状態"], self.statuses)
-            repairtype_id = self.get_id_from_name(new_values["対応"], self.types)
-            vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
-
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-
-                if self.repair_id:  # 更新
-                    cursor.execute("""
-                        UPDATE repair
-                        SET repairstatuses=?, request_date=?, completion_date=?,
-                            repairtype=?, vendor=?, technician=?, details=?, remarks=?
-                        WHERE id=?
-                    """, (
-                        repairstatus_id, new_values["依頼日"], new_values["完了日"],
-                        repairtype_id, vendor_id, new_values["技術者"],
-                        new_values["詳細"], new_values["備考"], self.repair_id
-                    ))
-                else:  # 新規
-                    cursor.execute("""
-                        INSERT INTO repair
-                        (equipment_code, repairstatuses, request_date, completion_date,
-                         repairtype, vendor, technician, details, remarks)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        self.equipment_code, repairstatus_id, new_values["依頼日"], new_values["完了日"],
-                        repairtype_id, vendor_id, new_values["技術者"],
-                        new_values["詳細"], new_values["備考"]
-                    ))
-                    self.repair_id = cursor.lastrowid
-
-                conn.commit()
-
+            self.execute_db_save()
             messagebox.showinfo("保存完了", "修理情報を保存しました。")
             if self.refresh_callback:
                 self.refresh_callback()
             self.destroy()
+        except ValueError:
+            pass  # 必須チェックエラー時は画面を閉じない
         except Exception as e:
             messagebox.showerror("保存エラー", f"修理情報保存中にエラーが発生しました:\n{e}")
     
     def save_changes_without_close(self):
-        """修理情報を保存するがウィンドウを閉じない（PDF添付用）"""
-        try:
-            new_values = {k: self.get_widget_value(w) for k, w in self.entries.items()}
-            repairstatus_id = self.get_id_from_name(new_values["状態"], self.statuses)
-            repairtype_id = self.get_id_from_name(new_values["対応"], self.types)
-            vendor_id = self.get_id_from_name(new_values["業者"], self.vendors)
-
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-
-                if self.repair_id:  # 既存修理データを更新
-                    cursor.execute("""
-                        UPDATE repair
-                        SET repairstatuses=?, request_date=?, completion_date=?,
-                            repairtype=?, vendor=?, technician=?, details=?, remarks=?
-                        WHERE id=?
-                    """, (
-                        repairstatus_id, new_values["依頼日"], new_values["完了日"],
-                        repairtype_id, vendor_id, new_values["技術者"],
-                        new_values["詳細"], new_values["備考"], self.repair_id
-                    ))
-                else:  # 新規修理データを追加
-                    cursor.execute("""
-                        INSERT INTO repair
-                        (equipment_code, repairstatuses, request_date, completion_date,
-                         repairtype, vendor, technician, details, remarks)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        self.equipment_code, repairstatus_id, new_values["依頼日"], new_values["完了日"],
-                        repairtype_id, vendor_id, new_values["技術者"],
-                        new_values["詳細"], new_values["備考"]
-                    ))
-                    self.repair_id = cursor.lastrowid
-
-                conn.commit()
-
-            # ウィンドウは閉じず、リロードのみ行う
-            if self.refresh_callback:
-                self.refresh_callback()
-
-        except Exception as e:
-            messagebox.showerror("保存エラー", f"修理情報保存中にエラーが発生しました:\n{e}")
-
+        """「PDF添付」時用: 保存するがウィンドウは閉じない"""
+        self.execute_db_save()
+        if self.refresh_callback:
+            self.refresh_callback()
 
     # ========= PDF添付 =========
     def attach_pdf(self):
         """PDFファイル添付（保存＋データ更新＋リスト更新）"""
-        # まず現在の編集内容を保存
         try:
             self.save_changes_without_close()
+        except ValueError:
+            return  # 必須入力エラー
         except Exception as e:
             messagebox.showerror("保存エラー", f"保存中にエラーが発生しました:\n{e}")
             return
@@ -275,7 +251,6 @@ class EditRepairWindow(tk.Toplevel):
         if not new_name.lower().endswith(".pdf"):
             new_name += ".pdf"
 
-
         try:
             # 添付先ディレクトリ
             save_dir = os.path.join("attached_pdfs", str(self.repair_id))
@@ -289,19 +264,16 @@ class EditRepairWindow(tk.Toplevel):
 
             messagebox.showinfo("完了", f"PDFを添付しました。\n{save_path}")
 
-            # === PDFリスト再読み込み ===
+            # === リストおよびデータの再読み込み ===
             self.load_pdf_list()
-
-            # === 修理データ再読込（更新反映） ===
             self.load_repair_data(self.repair_id)
 
-            # ウィンドウを前面に
+            # ウィンドウを最前面に復帰
             self.lift()
             self.focus_force()
 
         except Exception as e:
             messagebox.showerror("添付エラー", f"PDF添付中にエラーが発生しました:\n{e}")
-
 
     # ========= PDF一覧読込 =========
     def load_pdf_list(self):

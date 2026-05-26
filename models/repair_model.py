@@ -77,7 +77,7 @@ class RepairModel:
                 r.details,
                 r.remarks
             FROM repair r
-            LEFT JOIN repair_status_master rs ON r.repairstatuses = rs.id
+            LEFT JOIN repair_statuse_master rs ON r.repairstatuses = rs.id
             LEFT JOIN repair_type_master rt ON r.repairtype = rt.id
             LEFT JOIN celler_master c ON r.vendor = c.id
             WHERE r.equipment_code = ?
